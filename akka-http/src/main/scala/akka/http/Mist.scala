@@ -138,7 +138,7 @@ trait Mist extends Logging {
  * Async impls currently supported: Servlet3.0, Jetty Continuations
  */
 class AkkaMistServlet extends HttpServlet with Mist {
-  import javax.servlet.{ServletConfig}
+  import javax.servlet.ServletConfig
 
   /**
    * Initializes Mist

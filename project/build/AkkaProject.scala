@@ -148,10 +148,11 @@ class AkkaParentProject(info: ProjectInfo) extends DefaultProject(info) {
 
     lazy val javax_servlet_30 = "org.glassfish" % "javax.servlet" % JAVAX_SERVLET_VERSION % "provided" //CDDL v1
 
-    lazy val jetty         = "org.eclipse.jetty" % "jetty-server"  % JETTY_VERSION % "compile" //Eclipse license
-    lazy val jetty_util    = "org.eclipse.jetty" % "jetty-util"    % JETTY_VERSION % "compile" //Eclipse license
-    lazy val jetty_xml     = "org.eclipse.jetty" % "jetty-xml"     % JETTY_VERSION % "compile" //Eclipse license
-    lazy val jetty_servlet = "org.eclipse.jetty" % "jetty-servlet" % JETTY_VERSION % "compile" //Eclipse license
+    lazy val jetty         = "org.eclipse.jetty" % "jetty-server"    % JETTY_VERSION % "compile" //Eclipse license
+    lazy val jetty_util    = "org.eclipse.jetty" % "jetty-util"      % JETTY_VERSION % "compile" //Eclipse license
+    lazy val jetty_xml     = "org.eclipse.jetty" % "jetty-xml"       % JETTY_VERSION % "compile" //Eclipse license
+    lazy val jetty_servlet = "org.eclipse.jetty" % "jetty-servlet"   % JETTY_VERSION % "compile" //Eclipse license
+    lazy val jetty_ws      = "org.eclipse.jetty" % "jetty-websocket" % JETTY_VERSION % "compile" //Eclipse license
 
     lazy val uuid       = "com.eaio" % "uuid" % "3.2" % "compile" //MIT license
 
@@ -394,6 +395,7 @@ class AkkaParentProject(info: ProjectInfo) extends DefaultProject(info) {
     val jetty_util       = Dependencies.jetty_util
     val jetty_xml        = Dependencies.jetty_xml
     val jetty_servlet    = Dependencies.jetty_servlet
+    val jetty_websocket  = Dependencies.jetty_ws
     val jackson_core     = Dependencies.jackson_core
     val jersey           = Dependencies.jersey
     val jersey_contrib   = Dependencies.jersey_contrib
