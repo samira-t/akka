@@ -831,12 +831,11 @@ class LocalActorRef private[akka] (
       try {
         dispatch(messageHandle)
       } catch {
-        case e =>
+        case e => {
           Actor.log.slf4j.error("Could not invoke actor [{}]", this)
           Actor.log.slf4j.error("Problem", e)
           throw e
-      } finally {
-        currentMessage = null //TODO: Don't reset this, we might want to resend the message
+        }
       }
     }
   }
