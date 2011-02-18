@@ -23,10 +23,10 @@ class AkkaMistWebsocketServlet extends WebSocketServlet with Mist
   override def init(config: ServletConfig) {
     super.init(config)
     initMist(config.getServletContext)
-    log.slf4j.info("Supporting Jetty web sockets.")
+    log.slf4j.info("Supporting Jetty web sockets (experimental).")
   }
 
-  protected override def doWebSocketConnect(request:HttpServletRequest, protocol:String):WebSocket = new MistSocket(request, protocol)
+  protected override def doWebSocketConnect(request:HttpServletRequest, protocol:String):WebSocket = MistSocket(request)
 	
   //protected override def checkOrigin(request:HttpServletRequest, host:String, origin:String):String
   //protected override def service(request:HttpServletRequest, response:HttpServletResponse) 
@@ -40,6 +40,7 @@ class AkkaMistWebsocketServlet extends WebSocketServlet with Mist
 	
 }
 
+/*
 class MistSocketActor extends Actor
 {
 	private var _outbound:Option[WebSocket.Outbound] = None
@@ -65,33 +66,54 @@ class MistSocketActor extends Actor
 	}
 	
 }
+*/
 
-
-class MistSocket(hsr:HttpServletRequest, protocol:String) extends WebSocket with Mist
+trait WebSocketProducer
 {
-	private var _msa:ActorRef = Actor.actorOf[MistSocketActor].start
-	
-    override def onConnect(outbound:WebSocket.Outbound) = _msa ! outbound
-    override def onDisconnect = _msa stop
-    
-    def onFragment(more:Boolean, opcode:Byte, data:Array[Byte], offset:Int, length:Int) = 
-      _msa ! Tuple2(_root, Frame(_msa, hsr, protocol, more, opcode, data, offset, length))
+  this:Actor =>
 
-    def onMessage(opcode:Byte, data:Array[Byte], offset:Int, length:Int) = 
-      _msa ! Tuple2(_root, Frame(_msa, hsr, protocol, false, opcode, data, offset, length))
-		
-    def onMessage(opcode:Byte, data:String) =
-      _msa ! Tuple2(_root, Frame(_msa, hsr, protocol, false, opcode, data.getBytes, 0, data.length))
+  import akka.serialization.Serializable.ScalaJSON
+  import akka.serialization.Serializable.SBinary
+  import sbinary.DefaultProtocol._
+
+  final val TextFrame = 0x4
+  final val BinaryFrame = 0x5
+
+  protected def handleWebSocketRequest:Receive =
+  {
+    case Connect(_,consumer) => become (_wsrecv(consumer))
+  }
+
+  private def _wsrecv(socket:WebSocket.Outbound):Receive =
+  {
+    case Disconnect => unbecome
+    case f:Frame => socket sendMessage (BinaryFrame, f data, 0, f length)
+    case s:String => socket sendMessage s
+    case a:Array[Byte] => socket sendMessage (BinaryFrame, a, 0, a size)
+    case sj:ScalaJSON[_] => socket sendMessage sj.toJSON
+    case sb:SBinary[_] =>
+      val sbin = sb.toBytes
+      socket sendMessage (BinaryFrame, sbin, 0, sbin size)
+    case any:Any => socket sendMessage any.toString
+  }
+}
+
+class MistSocket(request:HttpServletRequest) extends WebSocket with Mist
+{
+  override def onConnect(outbound:WebSocket.Outbound) = _root ! Connect(request, outbound)
+  override def onDisconnect = _root ! Disconnect(request)
+
+  def onFragment(more:Boolean, opcode:Byte, data:Array[Byte], offset:Int, length:Int) = _root ! Frame(request, data, length)
+  def onMessage(opcode:Byte, data:Array[Byte], offset:Int, length:Int) = _root ! Frame(request, data, length)
+  def onMessage(opcode:Byte, data:String) = _root ! Frame(request, data getBytes, data length)
 }
 
 object MistSocket
 {
-  case object Disconnect
-  def apply(hsr:HttpServletRequest, protocol:String) = new MistSocket(hsr, protocol)
+  def apply(request:HttpServletRequest) = new MistSocket(request)
 }
 
-
-case class Frame(socket:ActorRef, hsr:HttpServletRequest, protocol:String, more:Boolean, opcode:Byte, data:Array[Byte], offset:Int, length:Int) extends RequestMethod
+class WebSocketRequest(req:HttpServletRequest) extends RequestMethod
 {
   val builder = null
   val context = None
@@ -99,10 +121,11 @@ case class Frame(socket:ActorRef, hsr:HttpServletRequest, protocol:String, more:
   def timeout(ms:Long) = false
   val suspended = false
 
-  override def request = hsr
+  override def request = req
   override def response = null
-
-  def this(socket:ActorRef, frame:Frame, data:Array[Byte], length:Int) = 
-    this(socket, frame.hsr, frame.protocol, frame.more, frame.opcode, data, 0, length)
 }
+
+case class Connect(req:HttpServletRequest, consumer:WebSocket.Outbound) extends WebSocketRequest(req)
+case class Disconnect(req:HttpServletRequest) extends WebSocketRequest(req)
+case class Frame(req:HttpServletRequest, data:Array[Byte], length:Int) extends WebSocketRequest(req)
 
