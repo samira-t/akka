@@ -19,17 +19,17 @@ final class Ref[E] {
 
         def set(newValue: E) = {
             val tx = AkkaStm.getThreadLocalTransaction
-            if (tx == null) ref.atomicSet(newValue) else Ref.this.set(newValue, tx)
+            if (tx eq null) ref.atomicSet(newValue) else Ref.this.set(newValue, tx)
         }
 
         def get(): E = {
             val tx = AkkaStm.getThreadLocalTransaction
-            if (tx == null) ref.atomicGet() else Ref.this.get(tx)
+            if (tx eq null) ref.atomicGet() else Ref.this.get(tx)
         }
 
         def alter(f: (E) => E): E = {
             val tx = AkkaStm.getThreadLocalTransaction
-            if (tx == null) throw new TodoException() else Ref.this.alter(f, tx)
+            if (tx eq null) throw new TodoException() else Ref.this.alter(f, tx)
         }
 
         def getOrElse(defaultValue: E) = {
@@ -37,12 +37,9 @@ final class Ref[E] {
             if (result == null) defaultValue else result
         }
 
-        def opt(): Option[E] = {
-            val result = get()
-            if (result == null) None else new Some[E](result)
-        }
+        def opt()= Option(get())
 
-        def isNull(): Boolean = get() ==null
+        def isNull(): Boolean = get() == null
     }
     val atom = new RefAtom[E] {
         def swap(newValue: E) = ref.atomicGetAndSet(newValue)
@@ -62,10 +59,7 @@ final class Ref[E] {
             if (result == null) defaultValue else result
         }
 
-        def opt(): Option[E] = {
-            val result = ref.atomicGet
-            if (result == null) None else new Some[E](result)
-        }
+        def opt() = Option(ref.atomicGet)
 
         def isNull(): Boolean = ref.atomicIsNull
     }
@@ -144,22 +138,22 @@ final class IntRef(value: Int = 0) {
     val view = new View[Int] {
         def swap(newValue: Int) = {
             val tx = AkkaStm.getThreadLocalTransaction
-            if (tx == null) ref.atomicGetAndSet(newValue) else IntRef.this.swap(newValue, tx)
+            if (tx eq null) ref.atomicGetAndSet(newValue) else IntRef.this.swap(newValue, tx)
         }
 
         def set(newValue: Int) = {
             val tx = AkkaStm.getThreadLocalTransaction
-            if (tx == null) ref.atomicSet(newValue) else IntRef.this.set(newValue, tx)
+            if (tx eq null) ref.atomicSet(newValue) else IntRef.this.set(newValue, tx)
         }
 
         def get(): Int = {
             val tx = AkkaStm.getThreadLocalTransaction
-            if (tx == null) ref.atomicGet() else IntRef.this.get(tx)
+            if (tx eq null) ref.atomicGet() else IntRef.this.get(tx)
         }
 
         def alter(f: (Int) => Int): Int = {
             val tx = AkkaStm.getThreadLocalTransaction
-            if (tx == null) throw new TodoException() else IntRef.this.alter(f, tx)
+            if (tx eq null) throw new TodoException() else IntRef.this.alter(f, tx)
         }
     }
 
@@ -240,22 +234,22 @@ final class DoubleRef(value: Double = 0) {
     val view = new View[Double] {
         def swap(newValue: Double) = {
             val tx = AkkaStm.getThreadLocalTransaction
-            if (tx == null) ref.atomicGetAndSet(newValue) else DoubleRef.this.swap(newValue, tx)
+            if (tx eq null) ref.atomicGetAndSet(newValue) else DoubleRef.this.swap(newValue, tx)
         }
 
         def set(newValue: Double) = {
             val tx = AkkaStm.getThreadLocalTransaction
-            if (tx == null) ref.atomicSet(newValue) else DoubleRef.this.set(newValue, tx)
+            if (tx eq null) ref.atomicSet(newValue) else DoubleRef.this.set(newValue, tx)
         }
 
         def get() = {
             val tx = AkkaStm.getThreadLocalTransaction
-            if (tx == null) ref.atomicGet() else DoubleRef.this.get(tx)
+            if (tx eq null) ref.atomicGet() else DoubleRef.this.get(tx)
         }
 
         def alter(f: (Double) => Double): Double = {
             val tx = AkkaStm.getThreadLocalTransaction
-            if (tx == null) throw new TodoException() else DoubleRef.this.alter(f, tx)
+            if (tx eq null) throw new TodoException() else DoubleRef.this.alter(f, tx)
         }
     }
 
@@ -344,22 +338,22 @@ final class BooleanRef(value: Boolean = false) {
     val view = new View[Boolean] {
         def swap(newValue: Boolean) = {
             val tx = AkkaStm.getThreadLocalTransaction
-            if (tx == null) ref.atomicGetAndSet(newValue) else BooleanRef.this.swap(newValue, tx)
+            if (tx eq null) ref.atomicGetAndSet(newValue) else BooleanRef.this.swap(newValue, tx)
         }
 
         def set(newValue: Boolean) = {
             val tx = AkkaStm.getThreadLocalTransaction
-            if (tx == null) ref.atomicSet(newValue) else BooleanRef.this.set(newValue, tx)
+            if (tx eq null) ref.atomicSet(newValue) else BooleanRef.this.set(newValue, tx)
         }
 
         def get() = {
             val tx = AkkaStm.getThreadLocalTransaction
-            if (tx == null) ref.atomicGet() else BooleanRef.this.get(tx)
+            if (tx eq null) ref.atomicGet() else BooleanRef.this.get(tx)
         }
 
         def alter(f: (Boolean) => Boolean): Boolean = {
             val tx = AkkaStm.getThreadLocalTransaction
-            if (tx == null) throw new TodoException() else BooleanRef.this.alter(f, tx)
+            if (tx eq null) throw new TodoException() else BooleanRef.this.alter(f, tx)
         }
     }
 
@@ -417,22 +411,22 @@ final class LongRef(value: Long = 0) {
     val view = new View[Long] {
         def swap(newValue: Long) = {
             val tx = AkkaStm.getThreadLocalTransaction
-            if (tx == null) ref.atomicGetAndSet(newValue) else LongRef.this.swap(newValue, tx)
+            if (tx eq null) ref.atomicGetAndSet(newValue) else LongRef.this.swap(newValue, tx)
         }
 
         def set(newValue: Long) = {
             val tx = AkkaStm.getThreadLocalTransaction
-            if (tx == null) ref.atomicSet(newValue) else LongRef.this.set(newValue, tx)
+            if (tx eq null) ref.atomicSet(newValue) else LongRef.this.set(newValue, tx)
         }
 
         def get() = {
             val tx = AkkaStm.getThreadLocalTransaction
-            if (tx == null) ref.atomicGet() else LongRef.this.get(tx)
+            if (tx eq null) ref.atomicGet() else LongRef.this.get(tx)
         }
 
         def alter(f: (Long) => Long): Long = {
             val tx = AkkaStm.getThreadLocalTransaction
-            if (tx == null) throw new TodoException() else LongRef.this.alter(f, tx)
+            if (tx eq null) throw new TodoException() else LongRef.this.alter(f, tx)
         }
     }
 
@@ -519,13 +513,13 @@ class LeanTxExecutor(transactionFactory: GammaTransactionFactory) extends TxExec
     def apply[@specialized E](block: (Transaction) => E): E = {
         val transactionContainer = ThreadLocalTransaction.getThreadLocalTransactionContainer();
         var pool: GammaTransactionPool = transactionContainer.txPool.asInstanceOf[GammaTransactionPool]
-        if (pool == null) {
+        if (pool eq null) {
             pool = new GammaTransactionPool
             transactionContainer.txPool = pool
         }
 
         var tx = transactionContainer.tx.asInstanceOf[GammaTransaction]
-        if (tx != null) return block(tx)
+        if (tx ne null) return block(tx)
 
         tx = transactionFactory.newTransaction(pool)
         transactionContainer.tx = tx
@@ -565,7 +559,7 @@ class LeanTxExecutor(transactionFactory: GammaTransactionFactory) extends TxExec
         }
 
         throw new TooManyRetriesException(
-            format("[%s] Maximum number of %s retries has been reached",config.getFamilyName, config.getMaxRetries), cause)
+            format("[%s] Maximum number of %s retries has been reached", config.getFamilyName, config.getMaxRetries), cause)
     }
 }
 
@@ -619,9 +613,9 @@ trait RefAtom[E] extends Atom[E] {
 
 trait NumberAtom[E] extends Atom[E] {
 
-    def atomicInc(amount: E ): E
+    def atomicInc(amount: E): E
 
-    def atomicDec(amount: E ): E
+    def atomicDec(amount: E): E
 }
 
 trait AkkaLock {
@@ -683,11 +677,11 @@ class TxExecutorConfigurer(val builder: GammaTransactionFactoryBuilder) {
     def setJtaEnabled() = {
         //just an example how the permanent listeners can be added to add your own logic that will always be executed.
         //no need to register the individual listeners anymore (also makes it faster).
-        val listener = new TransactionListener(){
+        val listener = new TransactionListener() {
             def notify(tx: Transaction, e: TransactionEvent) = {
-                e match{
-                    case TransactionEvent.PreStart =>println ("prestart")
-                    case TransactionEvent.PostStart =>println ("poststart")
+                e match {
+                    case TransactionEvent.PreStart => println("prestart")
+                    case TransactionEvent.PostStart => println("poststart")
                     case TransactionEvent.PrePrepare => println("preprepare")
                     case TransactionEvent.PostAbort => println("postabort")
                     case TransactionEvent.PostCommit => println("postcommit")
@@ -721,7 +715,7 @@ trait RefFactory {
 object AkkaStm extends RefFactory {
     val gammaStm = GlobalStmInstance.getGlobalStmInstance.asInstanceOf[GammaStm]
     val defaultTxExecutor = new LeanTxExecutor(
-            gammaStm.newTransactionFactoryBuilder().newTransactionFactory())
+        gammaStm.newTransactionFactoryBuilder().newTransactionFactory())
 
     def getThreadLocalTransaction(): Transaction = ThreadLocalTransaction.getThreadLocalTransaction()
 
