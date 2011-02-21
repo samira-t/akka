@@ -1,0 +1,22 @@
+
+INTEGRATION PROBLEMS.
+
+- commute: since the current evaluation of commuting function relies on the multiverse provided functions
+
+- alter: since the evaluation of function rely on the multiverse provided functions
+
+- transaction: currently the multiverse transaction is pushed.. not the scala one
+
+TODO:
+
+- implicit transactions
+
+- fat atomic block for propagation support
+
+DONE
+
+- methods depending on predicates: also rely on multiverse provided predicates
+
+- mapping of transactions to Scala STM exceptions: Not needed
+
+
