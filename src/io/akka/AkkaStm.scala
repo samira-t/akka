@@ -635,11 +635,11 @@ trait RefAtom[E] extends Atom[E] {
     def isNull(): Boolean
 }
 
-trait NumberAtom[E <: Number] extends Atom[E] {
+trait NumberAtom[E] extends Atom[E] {
 
-    def atomicInc(amount: E = 1): E
+    def atomicInc(amount: E ): E
 
-    def atomicDec(amount: E = 1): E
+    def atomicDec(amount: E ): E
 }
 
 trait AkkaLock {
