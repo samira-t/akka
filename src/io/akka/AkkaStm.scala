@@ -2,7 +2,7 @@ package io.akka
 
 import org.multiverse.api._
 import exceptions._
-import lifecycle.TransactionListener
+import lifecycle.{TransactionEvent, TransactionListener}
 import org.multiverse.stms.gamma.transactions.{GammaTransactionFactoryBuilder, GammaTransactionFactory, GammaTransaction, GammaTransactionPool}
 import org.multiverse.stms.gamma.{GammaStmUtils, GammaStm}
 import org.multiverse.stms.gamma.transactionalobjects._
@@ -128,15 +128,11 @@ final class Ref[E] {
     def awaitNotNullAndGet(tx: Transaction): E = ref.awaitNotNullAndGet(tx)
 
     def await(f: (E) => Boolean, lockMode: LockMode = LockMode.None) = {
-        if (!f(ref.getAndLock(lockMode))) {
-            AkkaStm.retry()
-        }
+        if (!f(ref.getAndLock(lockMode))) AkkaStm.retry()
     }
 
     def await(f: (E) => Boolean, tx: Transaction, lockMode: LockMode = LockMode.None) = {
-        if (!f(ref.getAndLock(tx, lockMode))) {
-            tx.retry()
-        }
+        if (!f(ref.getAndLock(tx, lockMode))) tx.retry()
     }
 }
 
@@ -231,17 +227,9 @@ final class IntRef(value: Int = 0) {
 
     def await(value: Int, tx: Transaction) = ref.await(tx, value)
 
-    def await(f: (Int) => Boolean, lockMode: LockMode = LockMode.None) = {
-        if (!f(ref.getAndLock(lockMode))) {
-            AkkaStm.retry()
-        }
-    }
+    def await(f: (Int) => Boolean, lockMode: LockMode = LockMode.None) = if (!f(ref.getAndLock(lockMode))) AkkaStm.retry()
 
-    def await(f: (Int) => Boolean, tx: Transaction, lockMode: LockMode = LockMode.None) = {
-        if (!f(ref.getAndLock(tx, lockMode))) {
-            tx.retry()
-        }
-    }
+    def await(f: (Int) => Boolean, tx: Transaction, lockMode: LockMode = LockMode.None) = if (!f(ref.getAndLock(tx, lockMode))) tx.retry()
 }
 
 final class DoubleRef(value: Double = 0) {
@@ -537,9 +525,7 @@ class LeanTxExecutor(transactionFactory: GammaTransactionFactory) extends TxExec
         }
 
         var tx = transactionContainer.tx.asInstanceOf[GammaTransaction]
-        if (tx != null) {
-            return block(tx)
-        }
+        if (tx != null) return block(tx)
 
         tx = transactionFactory.newTransaction(pool)
         transactionContainer.tx = tx
@@ -556,7 +542,7 @@ class LeanTxExecutor(transactionFactory: GammaTransactionFactory) extends TxExec
                 } catch {
                     case e: RetryError => {
                         cause = e
-                        tx.awaitUpdate
+                        tx.awaitUpdate()
                     }
                     case e: SpeculativeConfigurationError => {
                         cause = e
@@ -573,16 +559,13 @@ class LeanTxExecutor(transactionFactory: GammaTransactionFactory) extends TxExec
                 }
             } while (tx.softReset)
         } finally {
-            if (abort) {
-                tx.abort
-            }
+            if (abort) tx.abort()
             pool.put(tx)
             transactionContainer.tx = null
         }
 
         throw new TooManyRetriesException(
-            format("[%s] Maximum number of %s retries has been reached",
-                config.getFamilyName, config.getMaxRetries), cause)
+            format("[%s] Maximum number of %s retries has been reached",config.getFamilyName, config.getMaxRetries), cause)
     }
 }
 
@@ -600,7 +583,6 @@ trait View[E] {
 
     def alter(f: (E) => E): E
 }
-
 
 trait RefView[E] extends View[E] {
 
@@ -698,6 +680,23 @@ class TxExecutorConfigurer(val builder: GammaTransactionFactoryBuilder) {
 
     def setBlockingAllowed(blockingAllowed: Boolean) = new TxExecutorConfigurer(builder.setBlockingAllowed(blockingAllowed))
 
+    def setJtaEnabled() = {
+        //just an example how the permanent listeners can be added to add your own logic that will always be executed.
+        //no need to register the individual listeners anymore (also makes it faster).
+        val listener = new TransactionListener(){
+            def notify(tx: Transaction, e: TransactionEvent) = {
+                e match{
+                    case TransactionEvent.PreStart =>println ("prestart")
+                    case TransactionEvent.PostStart =>println ("poststart")
+                    case TransactionEvent.PrePrepare => println("preprepare")
+                    case TransactionEvent.PostAbort => println("postabort")
+                    case TransactionEvent.PostCommit => println("postcommit")
+                }
+            }
+        }
+        new TxExecutorConfigurer(builder.addPermanentListener(listener))
+    }
+
     def newTxExecutor() = {
         if (builder.getConfiguration.propagationLevel == PropagationLevel.Requires)
             new LeanTxExecutor(builder.newTransactionFactory)
@@ -722,14 +721,11 @@ trait RefFactory {
 object AkkaStm extends RefFactory {
     val gammaStm = GlobalStmInstance.getGlobalStmInstance.asInstanceOf[GammaStm]
     val defaultTxExecutor = new LeanTxExecutor(
-        gammaStm.newTransactionFactoryBuilder()
-            .newTransactionFactory())
+            gammaStm.newTransactionFactoryBuilder().newTransactionFactory())
 
     def getThreadLocalTransaction(): Transaction = ThreadLocalTransaction.getThreadLocalTransaction()
 
-    def apply[@specialized E](block: (Transaction) => E): E = {
-        defaultTxExecutor.apply(block)
-    }
+    def apply[@specialized E](block: (Transaction) => E): E = defaultTxExecutor.apply(block)
 
     def isControlFlow(x: Throwable): Boolean = x.isInstanceOf[ControlFlowError]
 
