@@ -46,6 +46,11 @@ final class Ref[E] {
             val tx = getThreadLocalTx
             if (tx eq null) atom.alter(f) else Ref.this.alter(f)(tx)
         }
+
+        override def toString = {
+            val tx = getThreadLocalTx
+            if(tx eq null) ref.atomicToString else ref.toString(tx)
+        }
     }
     val atom = new RefAtom[E] {
 
@@ -71,6 +76,8 @@ final class Ref[E] {
         })
 
         override def compareAndSet(expectedValue: E, newValue: E) = ref.atomicCompareAndSet(expectedValue, newValue)
+
+        override def toString = ref.atomicToString
     }
 
     def value: E = ref.get()
@@ -117,6 +124,8 @@ final class Ref[E] {
 
     def toDebugString():String = ref.toDebugString
 
+    def toString(implicit tx:Transaction = getThreadLocalTx):String = ref.toString(tx)
+
     def await(f: (E) => Boolean, lockMode: LockMode = LockMode.None)(implicit tx: Transaction = getThreadLocalTx) = {
         if (!f(ref.getAndLock(lockMode))) AkkaStm.retry()
     }
@@ -150,6 +159,11 @@ final class IntRef(value: Int = 0) {
             val tx = getThreadLocalTx
             if (tx eq null) atom.alter(f) else IntRef.this.alter(f)
         }
+
+        override def toString = {
+            val tx = getThreadLocalTx
+            if(tx eq null) ref.atomicToString else ref.toString(tx)
+        }
     }
 
     val atom = new NumberAtom[Int] {
@@ -171,6 +185,8 @@ final class IntRef(value: Int = 0) {
         override def atomicInc(amount: Int = 1) = ref.atomicIncrementAndGet(amount)
 
         override def atomicDec(amount: Int = 1) = ref.atomicIncrementAndGet(-1 * amount)
+
+        override def toString = ref.atomicToString
     }
 
     def *=(rhs: Int)(implicit tx: Transaction = getThreadLocalTx): Unit = {
@@ -229,6 +245,8 @@ final class IntRef(value: Int = 0) {
 
     def toDebugString():String = ref.toDebugString
 
+    def toString(implicit tx:Transaction = getThreadLocalTx):String = ref.toString(tx)
+
     def await(value: Int)(implicit tx: Transaction = getThreadLocalTx) = ref.await(tx, value)
 
     //def await(f: (Int) => Boolean, tx: Transaction, lockMode: LockMode = LockMode.None) = if (!f(ref.getAndLock(tx, lockMode))) tx.retry()
@@ -263,6 +281,11 @@ final class DoubleRef(value: Double = 0) {
             implicit val tx = getThreadLocalTx
             if (tx eq null) atom.alter(f) else DoubleRef.this.alter(f)
         }
+
+        override def toString = {
+            val tx = getThreadLocalTx
+            if(tx eq null) ref.atomicToString else ref.toString(tx)
+        }
     }
 
     val atom = new NumberAtom[Double] {
@@ -284,6 +307,8 @@ final class DoubleRef(value: Double = 0) {
         override def atomicInc(amount: Double = 1) = ref.atomicIncrementAndGet(amount)
 
         override def atomicDec(amount: Double = 1) = ref.atomicIncrementAndGet(-1 * amount)
+
+        override def toString = ref.atomicToString
     }
 
     def *=(rhs: Double)(implicit tx: Transaction = getThreadLocalTx): Unit = {
@@ -343,6 +368,8 @@ final class DoubleRef(value: Double = 0) {
 
     def toDebugString():String = ref.toDebugString
 
+    def toString(implicit tx:Transaction = getThreadLocalTx):String = ref.toString(tx)
+
     def await(f: (Double) => Boolean, lockMode: LockMode = LockMode.None)(implicit tx: Transaction = getThreadLocalTx) = {
         if (!f(ref.getAndLock(tx, lockMode))) {
             tx.retry()
@@ -378,6 +405,11 @@ final class BooleanRef(value: Boolean = false) {
             implicit val tx = getThreadLocalTx
             if (tx eq null) atom.alter(f) else BooleanRef.this.alter(f)
         }
+
+        override def toString = {
+            val tx = getThreadLocalTx
+            if(tx eq null) ref.atomicToString else ref.toString(tx)
+        }
     }
 
     val atom = new Atom[Boolean] {
@@ -395,6 +427,8 @@ final class BooleanRef(value: Boolean = false) {
         })
 
         override def compareAndSet(expectedValue: Boolean, newValue: Boolean) = ref.atomicCompareAndSet(expectedValue, newValue)
+
+        override def toString = ref.atomicToString
     }
 
     def get(lockMode: LockMode = LockMode.None)(implicit tx: Transaction = getThreadLocalTx): Boolean =
@@ -425,6 +459,8 @@ final class BooleanRef(value: Boolean = false) {
     def ensure(implicit tx: Transaction = getThreadLocalTx): Unit = ref.ensure(tx)
 
     def toDebugString():String = ref.toDebugString
+
+    def toString(implicit tx:Transaction = getThreadLocalTx):String = ref.toString(tx)
 }
 
 final class LongRef(value: Long = 0) {
@@ -455,6 +491,11 @@ final class LongRef(value: Long = 0) {
             implicit val tx = getThreadLocalTx
             if (tx eq null) atom.alter(f) else LongRef.this.alter(f)
         }
+
+        override def toString = {
+            val tx = getThreadLocalTx
+            if(tx eq null) ref.atomicToString else ref.toString(tx)
+        }
     }
 
     val atom = new NumberAtom[Long] {
@@ -474,6 +515,8 @@ final class LongRef(value: Long = 0) {
         override def atomicInc(amount: Long = 1) = ref.atomicIncrementAndGet(amount)
 
         override def atomicDec(amount: Long = 1): Long = ref.atomicIncrementAndGet(-1 * amount)
+
+        override def toString = ref.atomicToString
     }
 
     def *=(rhs: Long)(implicit tx: Transaction = getThreadLocalTx): Unit = {
@@ -537,6 +580,8 @@ final class LongRef(value: Long = 0) {
     def ensure(implicit tx: Transaction = getThreadLocalTx): Unit = ref.ensure(tx)
 
     def toDebugString():String = ref.toDebugString
+
+    def toString(implicit tx:Transaction = getThreadLocalTx):String = ref.toString(tx)
 }
 
 class LeanTxExecutor(txFactory: GammaTransactionFactory) extends TxExecutor {
