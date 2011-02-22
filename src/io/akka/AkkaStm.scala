@@ -6,6 +6,7 @@ import lifecycle.{TransactionEvent, TransactionListener}
 import org.multiverse.stms.gamma.transactions.{GammaTransactionFactoryBuilder, GammaTransactionFactory, GammaTransaction, GammaTransactionPool}
 import org.multiverse.stms.gamma.{GammaStmUtils, GammaStm}
 import org.multiverse.stms.gamma.transactionalobjects._
+import java.util.concurrent.LinkedBlockingQueue
 
 final class Ref[E] {
 
@@ -739,19 +740,42 @@ object AkkaStm extends RefFactory {
     def newRef[E](): Ref[E] = new Ref[E]()
 }
 
-class Var[E] {
+class Var[@specialized E] {
     final val threadlocal = new ThreadLocal[E];
 
-    def get():E = threadlocal.get
+    def get(): E = threadlocal.get
 
-    def set(value:E):E = {
+    def alter(f: (E) => E): E = {
+        val result: E = f(threadlocal.get)
+        threadlocal.set(result)
+        result
+    }
+
+    def set(value: E): E = {
         threadlocal.set(value)
         value
     }
 
-    def swap(value:E):E = {
+    def swap(value: E): E = {
         val old = threadlocal.get
         threadlocal.set(value)
         old
     }
+}
+
+class Agent[E](initial: E) {
+    @volatile var value = initial
+    val queue = new LinkedBlockingQueue[(E) => E]
+
+    new Thread() {
+        def run() {
+            while (true) {
+                value = queue.take()(value)
+            }
+        }
+    }
+
+    def get(): E = value
+
+    def alter(f: (E) => E): Unit = queue.put(f)
 }
