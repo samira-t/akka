@@ -4,10 +4,11 @@ import org.multiverse.api._
 import exceptions._
 import lifecycle.{TransactionEvent, TransactionListener}
 import org.multiverse.stms.gamma.transactions.{GammaTransactionFactoryBuilder, GammaTransactionFactory, GammaTransaction, GammaTransactionPool}
-import org.multiverse.stms.gamma.{GammaStmUtils, GammaStm}
 import org.multiverse.stms.gamma.transactionalobjects._
 import javax.transaction.TransactionRequiredException
 import java.util.concurrent.{TimeUnit, LinkedBlockingQueue}
+import org.multiverse.stms.gamma.{GammaStmUtils, GammaStm}
+import org.multiverse.MultiverseConstants
 
 final class Ref[E] {
 
@@ -19,7 +20,7 @@ final class Ref[E] {
 
         override def get = {
             val tx = getThreadLocalTx
-            if (tx eq null) ref.atomicGet() else Ref.this.get()(tx)
+            if (tx eq null) ref.atomicGet() else ref.get(tx)
         }
 
         override def getOrElse(defaultValue: E) = {
@@ -32,13 +33,13 @@ final class Ref[E] {
         override def isNull = get == null
 
         override def swap(newValue: E) = {
-            implicit val tx = getThreadLocalTx
-            if (tx == null) ref.atomicGetAndSet(newValue) else Ref.this.swap(newValue)(tx)
+            val tx = getThreadLocalTx
+            if (tx == null) ref.atomicGetAndSet(newValue) else ref.getAndSet(tx, newValue)
         }
 
         override def set(newValue: E) = {
             val tx = getThreadLocalTx
-            if (tx eq null) ref.atomicSet(newValue) else Ref.this.set(newValue)(tx)
+            if (tx eq null) ref.atomicSet(newValue) else ref.set(tx, newValue)
         }
 
         override def alter(f: (E) => E) = {
@@ -160,6 +161,25 @@ final class IntRef(value: Int = 0) {
         override def atomicDec(amount: Int = 1) = ref.atomicIncrementAndGet(-1 * amount)
     }
 
+    def *=(rhs: Int)(implicit tx: Transaction = getThreadLocalTx): Unit = {
+        val tranlocal = ref.openForWrite(tx.asInstanceOf[GammaTransaction], MultiverseConstants.LOCKMODE_NONE)
+        val result: Int = tranlocal.long_value.asInstanceOf[Int] * rhs
+        tranlocal.long_value = result.asInstanceOf[Long]
+    }
+
+
+    def +=(rhs: Int)(implicit tx: Transaction = getThreadLocalTx): Unit = {
+        val tranlocal = ref.openForWrite(tx.asInstanceOf[GammaTransaction], MultiverseConstants.LOCKMODE_NONE)
+        val result: Int = tranlocal.long_value.asInstanceOf[Int] + rhs
+        tranlocal.long_value = result.asInstanceOf[Long]
+    }
+
+    def -=(rhs: Int)(implicit tx: Transaction = getThreadLocalTx): Unit = {
+        val tranlocal = ref.openForWrite(tx.asInstanceOf[GammaTransaction], MultiverseConstants.LOCKMODE_NONE)
+        val result: Int = tranlocal.long_value.asInstanceOf[Int] - rhs
+        tranlocal.long_value = result.asInstanceOf[Long]
+    }
+
     def get(lockMode: LockMode = LockMode.None)(implicit tx: Transaction = getThreadLocalTx): Int =
         ref.getAndLock(tx, lockMode)
 
@@ -242,6 +262,25 @@ final class DoubleRef(value: Double = 0) {
         override def atomicInc(amount: Double = 1) = ref.atomicIncrementAndGet(amount)
 
         override def atomicDec(amount: Double = 1) = ref.atomicIncrementAndGet(-1 * amount)
+    }
+
+    def *=(rhs: Double)(implicit tx: Transaction = getThreadLocalTx): Unit = {
+        val tranlocal = ref.openForWrite(tx.asInstanceOf[GammaTransaction], MultiverseConstants.LOCKMODE_NONE)
+        val result: Double = GammaStmUtils.longAsDouble(tranlocal.long_value) * rhs
+        tranlocal.long_value = GammaStmUtils.doubleAsLong(result)
+    }
+
+
+    def +=(rhs: Int)(implicit tx: Transaction = getThreadLocalTx): Unit = {
+        val tranlocal = ref.openForWrite(tx.asInstanceOf[GammaTransaction], MultiverseConstants.LOCKMODE_NONE)
+        val result: Double = GammaStmUtils.longAsDouble(tranlocal.long_value) + rhs
+        tranlocal.long_value = GammaStmUtils.doubleAsLong(result)
+    }
+
+    def -=(rhs: Int)(implicit tx: Transaction = getThreadLocalTx): Unit = {
+        val tranlocal = ref.openForWrite(tx.asInstanceOf[GammaTransaction], MultiverseConstants.LOCKMODE_NONE)
+        val result: Double = GammaStmUtils.longAsDouble(tranlocal.long_value) - rhs
+        tranlocal.long_value = GammaStmUtils.doubleAsLong(result)
     }
 
     def get(lockMode: LockMode = LockMode.None)(implicit tx: Transaction = getThreadLocalTx): Double =
@@ -398,6 +437,22 @@ final class LongRef(value: Long = 0) {
         override def atomicInc(amount: Long = 1) = ref.atomicIncrementAndGet(amount)
 
         override def atomicDec(amount: Long = 1): Long = ref.atomicIncrementAndGet(-1 * amount)
+    }
+
+    def *=(rhs: Long)(implicit tx: Transaction = getThreadLocalTx): Unit = {
+        val tranlocal = ref.openForWrite(tx.asInstanceOf[GammaTransaction], MultiverseConstants.LOCKMODE_NONE)
+        tranlocal.long_value = tranlocal.long_value * rhs
+    }
+
+
+    def +=(rhs: Long)(implicit tx: Transaction = getThreadLocalTx): Unit = {
+        val tranlocal = ref.openForWrite(tx.asInstanceOf[GammaTransaction], MultiverseConstants.LOCKMODE_NONE)
+        tranlocal.long_value = tranlocal.long_value + rhs
+    }
+
+    def -=(rhs: Long)(implicit tx: Transaction = getThreadLocalTx): Unit = {
+        val tranlocal = ref.openForWrite(tx.asInstanceOf[GammaTransaction], MultiverseConstants.LOCKMODE_NONE)
+        tranlocal.long_value = tranlocal.long_value - rhs
     }
 
     def get(lockMode: LockMode = LockMode.None)(implicit tx: Transaction = getThreadLocalTx): Long =
@@ -574,27 +629,27 @@ class AkkaLockImpl(val lock: Lock) extends AkkaLock {
 class TxExecutorConfigurer(val builder: GammaTransactionFactoryBuilder) {
 
     def withControlFlowErrorsReused(reused: Boolean) = {
-        if(builder.getConfiguration.isControlFlowErrorsReused) this
+        if (builder.getConfiguration.isControlFlowErrorsReused) this
         else new TxExecutorConfigurer(builder.setControlFlowErrorsReused(reused))
     }
 
     def withFamilyName(familyName: String) = {
-        if(familyName eq builder.getConfiguration.getFamilyName) this
+        if (familyName eq builder.getConfiguration.getFamilyName) this
         else new TxExecutorConfigurer(builder.setFamilyName(familyName))
     }
 
     def withPropagationLevel(propagationLevel: PropagationLevel) = {
-        if(propagationLevel eq builder.getConfiguration.getPropagationLevel) this
+        if (propagationLevel eq builder.getConfiguration.getPropagationLevel) this
         else new TxExecutorConfigurer(builder.setPropagationLevel(propagationLevel))
     }
 
     def withReadLockMode(lockMode: LockMode) = {
-        if(lockMode eq builder.getConfiguration.getReadLockMode) this
+        if (lockMode eq builder.getConfiguration.getReadLockMode) this
         else new TxExecutorConfigurer(builder.setReadLockMode(lockMode))
     }
 
     def withWriteLockMode(lockMode: LockMode) = {
-        if(lockMode eq builder.getConfiguration.getWriteLockMode)this
+        if (lockMode eq builder.getConfiguration.getWriteLockMode) this
         else new TxExecutorConfigurer(builder.setWriteLockMode(lockMode))
     }
 
@@ -602,63 +657,63 @@ class TxExecutorConfigurer(val builder: GammaTransactionFactoryBuilder) {
         new TxExecutorConfigurer(builder.addPermanentListener(listener))
 
     def withTraceLevel(traceLevel: TraceLevel) = {
-        if(traceLevel eq builder.getConfiguration.traceLevel) this
+        if (traceLevel eq builder.getConfiguration.traceLevel) this
         else new TxExecutorConfigurer(builder.setTraceLevel(traceLevel))
     }
 
     def withRetryTimeoutNs(timeout: Long, unit: TimeUnit = TimeUnit.SECONDS) = {
         val timeoutNs = unit.toNanos(timeout)
-        if(timeoutNs == builder.getConfiguration.getTimeoutNs) this
+        if (timeoutNs == builder.getConfiguration.getTimeoutNs) this
         else new TxExecutorConfigurer(builder.setTimeoutNs(timeoutNs))
     }
 
     def withInterruptible(interruptible: Boolean) = {
-        if(interruptible == builder.getConfiguration.isInterruptible) this
+        if (interruptible == builder.getConfiguration.isInterruptible) this
         else new TxExecutorConfigurer(builder.setInterruptible(interruptible))
     }
 
     def withBackoffPolicy(backoffPolicy: BackoffPolicy) = {
-        if(backoffPolicy eq builder.getConfiguration.getBackoffPolicy) this
+        if (backoffPolicy eq builder.getConfiguration.getBackoffPolicy) this
         else new TxExecutorConfigurer(builder.setBackoffPolicy(backoffPolicy))
     }
 
     def withDirtyCheck(dirtyCheckEnabled: Boolean) = {
-        if(dirtyCheckEnabled == builder.getConfiguration.isDirtyCheckEnabled) this
+        if (dirtyCheckEnabled == builder.getConfiguration.isDirtyCheckEnabled) this
         else new TxExecutorConfigurer(builder.setDirtyCheckEnabled(dirtyCheckEnabled))
     }
 
     def withSpinCount(spinCount: Int) = {
-        if(spinCount == builder.getConfiguration.getSpinCount) this
+        if (spinCount == builder.getConfiguration.getSpinCount) this
         else new TxExecutorConfigurer(builder.setSpinCount(spinCount))
     }
 
     def withReadonly(readonly: Boolean) = {
-        if(readonly == builder.getConfiguration.isReadonly) this
+        if (readonly == builder.getConfiguration.isReadonly) this
         else new TxExecutorConfigurer(builder.setReadonly(readonly))
     }
 
     def withReadTrackingEnabled(enabled: Boolean) = {
-        if(enabled == builder.getConfiguration.isReadTrackingEnabled) this
+        if (enabled == builder.getConfiguration.isReadTrackingEnabled) this
         else new TxExecutorConfigurer(builder.setReadTrackingEnabled(enabled))
     }
 
     def withSpeculation(speculative: Boolean) = {
-        if(speculative == builder.getConfiguration.isSpeculative) this
+        if (speculative == builder.getConfiguration.isSpeculative) this
         else new TxExecutorConfigurer(builder.setSpeculative(speculative))
     }
 
     def withMaxRetries(maxRetries: Int) = {
-        if(maxRetries == builder.getConfiguration.getMaxRetries) this
+        if (maxRetries == builder.getConfiguration.getMaxRetries) this
         else new TxExecutorConfigurer(builder.setMaxRetries(maxRetries))
     }
 
     def withIsolationLevel(isolationLevel: IsolationLevel) = {
-        if(isolationLevel eq builder.getConfiguration.getIsolationLevel) this
+        if (isolationLevel eq builder.getConfiguration.getIsolationLevel) this
         else new TxExecutorConfigurer(builder.setIsolationLevel(isolationLevel))
     }
 
     def withBlockingAllowed(blockingAllowed: Boolean) = {
-        if(blockingAllowed == builder.getConfiguration.isBlockingAllowed) this
+        if (blockingAllowed == builder.getConfiguration.isBlockingAllowed) this
         else new TxExecutorConfigurer(builder.setBlockingAllowed(blockingAllowed))
     }
 
