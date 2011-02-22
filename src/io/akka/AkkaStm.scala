@@ -115,6 +115,8 @@ final class Ref[E] {
 
     def awaitNotNullAndGet(implicit tx: Transaction = getThreadLocalTx): E = ref.awaitNotNullAndGet(tx)
 
+    def toDebugString():String = ref.toDebugString
+
     def await(f: (E) => Boolean, lockMode: LockMode = LockMode.None)(implicit tx: Transaction = getThreadLocalTx) = {
         if (!f(ref.getAndLock(lockMode))) AkkaStm.retry()
     }
@@ -224,6 +226,8 @@ final class IntRef(value: Int = 0) {
     }
 
     def ensure(implicit tx: Transaction = getThreadLocalTx): Unit = ref.ensure(tx)
+
+    def toDebugString():String = ref.toDebugString
 
     def await(value: Int)(implicit tx: Transaction = getThreadLocalTx) = ref.await(tx, value)
 
@@ -337,6 +341,8 @@ final class DoubleRef(value: Double = 0) {
 
     def ensure(implicit tx: Transaction = getThreadLocalTx): Unit = ref.ensure(tx)
 
+    def toDebugString():String = ref.toDebugString
+
     def await(f: (Double) => Boolean, lockMode: LockMode = LockMode.None)(implicit tx: Transaction = getThreadLocalTx) = {
         if (!f(ref.getAndLock(tx, lockMode))) {
             tx.retry()
@@ -417,6 +423,8 @@ final class BooleanRef(value: Boolean = false) {
         ref.await(tx, value)
 
     def ensure(implicit tx: Transaction = getThreadLocalTx): Unit = ref.ensure(tx)
+
+    def toDebugString():String = ref.toDebugString
 }
 
 final class LongRef(value: Long = 0) {
@@ -527,6 +535,8 @@ final class LongRef(value: Long = 0) {
     }
 
     def ensure(implicit tx: Transaction = getThreadLocalTx): Unit = ref.ensure(tx)
+
+    def toDebugString():String = ref.toDebugString
 }
 
 class LeanTxExecutor(txFactory: GammaTransactionFactory) extends TxExecutor {
