@@ -49,7 +49,7 @@ final class Ref[E] {
 
         override def toString = {
             val tx = getThreadLocalTx
-            if(tx eq null) ref.atomicToString else ref.toString(tx)
+            if (tx eq null) ref.atomicToString else ref.toString(tx)
         }
     }
     val atom = new RefAtom[E] {
@@ -71,7 +71,7 @@ final class Ref[E] {
 
         override def set(newValue: E) = ref.atomicSet(newValue)
 
-        override def alter(f: (E) => E) = ref.atomicAlterAndGet(new org.multiverse.api.functions.Function[E]{
+        override def alter(f: (E) => E) = ref.atomicAlterAndGet(new org.multiverse.api.functions.Function[E] {
             override def call(value: E) = f(value)
         })
 
@@ -115,16 +115,16 @@ final class Ref[E] {
     def isNull(implicit tx: Transaction = getThreadLocalTx): Boolean = ref.isNull(tx)
 
     def commute(f: (E) => E)(implicit tx: Transaction = getThreadLocalTx): Unit = {
-        ref.commute(tx, new org.multiverse.api.functions.Function[E]{
+        ref.commute(tx, new org.multiverse.api.functions.Function[E] {
             override def call(v: E) = f(v)
         })
     }
 
     def awaitNotNullAndGet(implicit tx: Transaction = getThreadLocalTx): E = ref.awaitNotNullAndGet(tx)
 
-    def toDebugString():String = ref.toDebugString
+    def toDebugString(): String = ref.toDebugString
 
-    def toString(implicit tx:Transaction = getThreadLocalTx):String = ref.toString(tx)
+    def toString(implicit tx: Transaction = getThreadLocalTx): String = ref.toString(tx)
 
     def await(f: (E) => Boolean, lockMode: LockMode = LockMode.None)(implicit tx: Transaction = getThreadLocalTx) = {
         if (!f(ref.getAndLock(lockMode))) AkkaStm.retry()
@@ -162,7 +162,7 @@ final class IntRef(value: Int = 0) {
 
         override def toString = {
             val tx = getThreadLocalTx
-            if(tx eq null) ref.atomicToString else ref.toString(tx)
+            if (tx eq null) ref.atomicToString else ref.toString(tx)
         }
     }
 
@@ -176,7 +176,7 @@ final class IntRef(value: Int = 0) {
 
         override def set(newValue: Int) = ref.atomicSet(newValue)
 
-        override def alter(f: (Int) => Int) = ref.atomicAlterAndGet(new org.multiverse.api.functions.IntFunction{
+        override def alter(f: (Int) => Int) = ref.atomicAlterAndGet(new org.multiverse.api.functions.IntFunction {
             override def call(value: Int) = f(value)
         })
 
@@ -235,17 +235,17 @@ final class IntRef(value: Int = 0) {
         result
     }
 
-    def commute(f: (Int) => Int)(implicit tx: Transaction = getThreadLocalTx): Unit =  {
-        ref.commute(tx, new org.multiverse.api.functions.IntFunction{
+    def commute(f: (Int) => Int)(implicit tx: Transaction = getThreadLocalTx): Unit = {
+        ref.commute(tx, new org.multiverse.api.functions.IntFunction {
             override def call(v: Int) = f(v)
         })
     }
 
     def ensure(implicit tx: Transaction = getThreadLocalTx): Unit = ref.ensure(tx)
 
-    def toDebugString():String = ref.toDebugString
+    def toDebugString(): String = ref.toDebugString
 
-    def toString(implicit tx:Transaction = getThreadLocalTx):String = ref.toString(tx)
+    def toString(implicit tx: Transaction = getThreadLocalTx): String = ref.toString(tx)
 
     def await(value: Int)(implicit tx: Transaction = getThreadLocalTx) = ref.await(tx, value)
 
@@ -284,7 +284,7 @@ final class DoubleRef(value: Double = 0) {
 
         override def toString = {
             val tx = getThreadLocalTx
-            if(tx eq null) ref.atomicToString else ref.toString(tx)
+            if (tx eq null) ref.atomicToString else ref.toString(tx)
         }
     }
 
@@ -298,7 +298,7 @@ final class DoubleRef(value: Double = 0) {
 
         override def set(newValue: Double) = ref.atomicSet(newValue)
 
-        override def alter(f: (Double) => Double) = ref.atomicAlterAndGet(new org.multiverse.api.functions.DoubleFunction{
+        override def alter(f: (Double) => Double) = ref.atomicAlterAndGet(new org.multiverse.api.functions.DoubleFunction {
             override def call(value: Double) = f(value)
         })
 
@@ -356,7 +356,7 @@ final class DoubleRef(value: Double = 0) {
     }
 
     def commute(f: (Double) => Double)(implicit tx: Transaction = getThreadLocalTx): Unit = {
-        ref.commute(tx, new org.multiverse.api.functions.DoubleFunction{
+        ref.commute(tx, new org.multiverse.api.functions.DoubleFunction {
             override def call(v: Double) = f(v)
         })
     }
@@ -366,9 +366,9 @@ final class DoubleRef(value: Double = 0) {
 
     def ensure(implicit tx: Transaction = getThreadLocalTx): Unit = ref.ensure(tx)
 
-    def toDebugString():String = ref.toDebugString
+    def toDebugString(): String = ref.toDebugString
 
-    def toString(implicit tx:Transaction = getThreadLocalTx):String = ref.toString(tx)
+    def toString(implicit tx: Transaction = getThreadLocalTx): String = ref.toString(tx)
 
     def await(f: (Double) => Boolean, lockMode: LockMode = LockMode.None)(implicit tx: Transaction = getThreadLocalTx) = {
         if (!f(ref.getAndLock(tx, lockMode))) {
@@ -408,7 +408,7 @@ final class BooleanRef(value: Boolean = false) {
 
         override def toString = {
             val tx = getThreadLocalTx
-            if(tx eq null) ref.atomicToString else ref.toString(tx)
+            if (tx eq null) ref.atomicToString else ref.toString(tx)
         }
     }
 
@@ -422,7 +422,7 @@ final class BooleanRef(value: Boolean = false) {
 
         override def set(newValue: Boolean) = ref.atomicSet(newValue)
 
-        override def alter(f: (Boolean) => Boolean) = ref.atomicAlterAndGet(new org.multiverse.api.functions.BooleanFunction{
+        override def alter(f: (Boolean) => Boolean) = ref.atomicAlterAndGet(new org.multiverse.api.functions.BooleanFunction {
             override def call(value: Boolean) = f(value)
         })
 
@@ -448,7 +448,7 @@ final class BooleanRef(value: Boolean = false) {
     }
 
     def commute(f: (Boolean) => Boolean)(implicit tx: Transaction = getThreadLocalTx): Unit = {
-        ref.commute(tx, new org.multiverse.api.functions.BooleanFunction{
+        ref.commute(tx, new org.multiverse.api.functions.BooleanFunction {
             override def call(v: Boolean) = f(v)
         })
     }
@@ -458,9 +458,9 @@ final class BooleanRef(value: Boolean = false) {
 
     def ensure(implicit tx: Transaction = getThreadLocalTx): Unit = ref.ensure(tx)
 
-    def toDebugString():String = ref.toDebugString
+    def toDebugString(): String = ref.toDebugString
 
-    def toString(implicit tx:Transaction = getThreadLocalTx):String = ref.toString(tx)
+    def toString(implicit tx: Transaction = getThreadLocalTx): String = ref.toString(tx)
 }
 
 final class LongRef(value: Long = 0) {
@@ -494,7 +494,7 @@ final class LongRef(value: Long = 0) {
 
         override def toString = {
             val tx = getThreadLocalTx
-            if(tx eq null) ref.atomicToString else ref.toString(tx)
+            if (tx eq null) ref.atomicToString else ref.toString(tx)
         }
     }
 
@@ -564,7 +564,7 @@ final class LongRef(value: Long = 0) {
     }
 
     def commute(f: (Long) => Long)(implicit tx: Transaction = getThreadLocalTx): Unit = {
-        ref.commute(tx, new org.multiverse.api.functions.LongFunction{
+        ref.commute(tx, new org.multiverse.api.functions.LongFunction {
             override def call(v: Long) = f(v)
         })
     }
@@ -579,9 +579,9 @@ final class LongRef(value: Long = 0) {
 
     def ensure(implicit tx: Transaction = getThreadLocalTx): Unit = ref.ensure(tx)
 
-    def toDebugString():String = ref.toDebugString
+    def toDebugString(): String = ref.toDebugString
 
-    def toString(implicit tx:Transaction = getThreadLocalTx):String = ref.toString(tx)
+    def toString(implicit tx: Transaction = getThreadLocalTx): String = ref.toString(tx)
 }
 
 class LeanTxExecutor(txFactory: GammaTransactionFactory) extends TxExecutor {
@@ -861,9 +861,7 @@ object AkkaStm extends RefFactory {
             case null => throw new TransactionRequiredException
             case tx: GammaTransaction => tx.register(new TransactionListener {
                 def notify(tx: Transaction, e: TransactionEvent) =
-                    e match {
-                        case TransactionEvent.PostCommit => f()
-                    }
+                    if (e == TransactionEvent.PostCommit) f()
             })
         }
     }
@@ -873,9 +871,7 @@ object AkkaStm extends RefFactory {
             case null => throw new TransactionRequiredException
             case tx: GammaTransaction => tx.register(new TransactionListener {
                 def notify(tx: Transaction, e: TransactionEvent) =
-                    e match {
-                        case TransactionEvent.PostAbort => f()
-                    }
+                    if (e == TransactionEvent.PostCommit) f()
             })
         }
     }
