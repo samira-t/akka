@@ -103,6 +103,8 @@ final class Ref[E] {
         result
     }
 
+    def ensure(implicit tx: Transaction = getThreadLocalTx): Unit = ref.ensure(tx)
+
     def isNull(implicit tx: Transaction = getThreadLocalTx): Boolean = ref.isNull(tx)
 
     def commute(f: (E) => E)(implicit tx: Transaction = getThreadLocalTx): Unit = {
@@ -221,6 +223,8 @@ final class IntRef(value: Int = 0) {
         })
     }
 
+    def ensure(implicit tx: Transaction = getThreadLocalTx): Unit = ref.ensure(tx)
+
     def await(value: Int)(implicit tx: Transaction = getThreadLocalTx) = ref.await(tx, value)
 
     //def await(f: (Int) => Boolean, tx: Transaction, lockMode: LockMode = LockMode.None) = if (!f(ref.getAndLock(tx, lockMode))) tx.retry()
@@ -331,6 +335,8 @@ final class DoubleRef(value: Double = 0) {
     //def await(value: Double)(implicit tx: Transaction = AkkaStm.getThreadLocalTx) =
     //    ref.await(tx, value)
 
+    def ensure(implicit tx: Transaction = getThreadLocalTx): Unit = ref.ensure(tx)
+
     def await(f: (Double) => Boolean, lockMode: LockMode = LockMode.None)(implicit tx: Transaction = getThreadLocalTx) = {
         if (!f(ref.getAndLock(tx, lockMode))) {
             tx.retry()
@@ -409,8 +415,9 @@ final class BooleanRef(value: Boolean = false) {
 
     def await(value: Boolean)(implicit tx: Transaction = getThreadLocalTx) =
         ref.await(tx, value)
-}
 
+    def ensure(implicit tx: Transaction = getThreadLocalTx): Unit = ref.ensure(tx)
+}
 
 final class LongRef(value: Long = 0) {
 
@@ -518,6 +525,8 @@ final class LongRef(value: Long = 0) {
             tx.retry()
         }
     }
+
+    def ensure(implicit tx: Transaction = getThreadLocalTx): Unit = ref.ensure(tx)
 }
 
 class LeanTxExecutor(txFactory: GammaTransactionFactory) extends TxExecutor {
