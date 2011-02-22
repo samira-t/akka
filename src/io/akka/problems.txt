@@ -9,11 +9,11 @@ INTEGRATION PROBLEMS.
 
 TODO:
 
-- implicit transactions
-
 - fat atomic block for propagation support
 
 DONE
+
+- implicit transactions
 
 - methods depending on predicates: also rely on multiverse provided predicates
 

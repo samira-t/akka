@@ -6,325 +6,276 @@ import lifecycle.{TransactionEvent, TransactionListener}
 import org.multiverse.stms.gamma.transactions.{GammaTransactionFactoryBuilder, GammaTransactionFactory, GammaTransaction, GammaTransactionPool}
 import org.multiverse.stms.gamma.{GammaStmUtils, GammaStm}
 import org.multiverse.stms.gamma.transactionalobjects._
-import java.util.concurrent.LinkedBlockingQueue
+import javax.transaction.TransactionRequiredException
+import java.util.concurrent.{TimeUnit, LinkedBlockingQueue}
 
 final class Ref[E] {
+
+    import AkkaStm._
 
     private val ref = new GammaRef[E](GlobalStmInstance.getGlobalStmInstance().asInstanceOf[GammaStm]);
     val lock: AkkaLock = new AkkaLockImpl(ref)
     val view = new RefView[E] {
-        def swap(newValue: E) = {
-            val tx = AkkaStm.getThreadLocalTransaction
-            if (tx == null) ref.atomicGetAndSet(newValue) else Ref.this.swap(newValue, tx)
+
+        override def get = {
+            val tx = getThreadLocalTx
+            if (tx eq null) ref.atomicGet() else Ref.this.get()(tx)
         }
 
-        def set(newValue: E) = {
-            val tx = AkkaStm.getThreadLocalTransaction
-            if (tx eq null) ref.atomicSet(newValue) else Ref.this.set(newValue, tx)
-        }
-
-        def get(): E = {
-            val tx = AkkaStm.getThreadLocalTransaction
-            if (tx eq null) ref.atomicGet() else Ref.this.get(tx)
-        }
-
-        def alter(f: (E) => E): E = {
-            val tx = AkkaStm.getThreadLocalTransaction
-            if (tx eq null) throw new TodoException() else Ref.this.alter(f, tx)
-        }
-
-        def getOrElse(defaultValue: E) = {
+        override def getOrElse(defaultValue: E) = {
             val result = get()
             if (result == null) defaultValue else result
         }
 
-        def opt() = Option(get())
+        override def opt() = Option(get)
 
-        def isNull(): Boolean = get() == null
+        override def isNull = get == null
+
+        override def swap(newValue: E) = {
+            implicit val tx = getThreadLocalTx
+            if (tx == null) ref.atomicGetAndSet(newValue) else Ref.this.swap(newValue)(tx)
+        }
+
+        override def set(newValue: E) = {
+            val tx = getThreadLocalTx
+            if (tx eq null) ref.atomicSet(newValue) else Ref.this.set(newValue)(tx)
+        }
+
+        override def alter(f: (E) => E) = {
+            val tx = getThreadLocalTx
+            if (tx eq null) throw new TodoException() else Ref.this.alter(f)(tx)
+        }
     }
     val atom = new RefAtom[E] {
-        def swap(newValue: E) = ref.atomicGetAndSet(newValue)
 
-        def set(newValue: E) = ref.atomicSet(newValue)
+        override def get = ref.atomicGet
 
-        def get(): E = ref.atomicGet
-
-        def alter(f: (E) => E): E = throw new TodoException()
-
-        def weakGet(): E = ref.atomicWeakGet
-
-        def compareAndSet(expectedValue: E, newValue: E): Boolean = ref.atomicCompareAndSet(expectedValue, newValue)
-
-        def getOrElse(defaultValue: E) = {
+        override def getOrElse(defaultValue: E) = {
             val result = ref.atomicGet
             if (result == null) defaultValue else result
         }
 
-        def opt() = Option(ref.atomicGet)
+        override def weakGet: E = ref.atomicWeakGet
 
-        def isNull(): Boolean = ref.atomicIsNull
+        override def opt = Option(ref.atomicGet)
+
+        override def isNull: Boolean = ref.atomicIsNull
+
+        override def swap(newValue: E) = ref.atomicGetAndSet(newValue)
+
+        override def set(newValue: E) = ref.atomicSet(newValue)
+
+        override def alter(f: (E) => E) = throw new TodoException()
+
+        override def compareAndSet(expectedValue: E, newValue: E) = ref.atomicCompareAndSet(expectedValue, newValue)
     }
 
     def value: E = ref.get()
 
     def value_=(newValue: E): Unit = ref.set(newValue)
 
-    def getOrElse(defaultValue: E, lockMode: LockMode = LockMode.None): E = {
-        val result = ref.getAndLock(lockMode)
-        if (result == null) defaultValue else result
-    }
-
-    def getOrElse(defaultValue: E, tx: Transaction, lockMode: LockMode = LockMode.None): E = {
+    def getOrElse(defaultValue: E, lockMode: LockMode = LockMode.None)(implicit tx: Transaction = getThreadLocalTx): E = {
         val result = ref.getAndLock(tx, lockMode)
         if (result == null) defaultValue else result
     }
 
-    def opt(lockMode: LockMode = LockMode.None): Option[E] = {
-        val result = ref.getAndLock(lockMode)
-        if (result == null) None else new Some[E](result)
-    }
-
-    def opt(tx: Transaction, lockMode: LockMode = LockMode.None): Option[E] = {
+    def opt(lockMode: LockMode = LockMode.None)(implicit tx: Transaction = getThreadLocalTx): Option[E] = {
         val result = ref.getAndLock(tx, lockMode)
         if (result == null) None else new Some[E](result)
     }
 
-    def get(lockMode: LockMode = LockMode.None): E = ref.getAndLock(lockMode)
+    def get(lockMode: LockMode = LockMode.None)(implicit tx: Transaction = getThreadLocalTx): E =
+        ref.getAndLock(tx, lockMode)
 
-    def get(tx: Transaction, lockMode: LockMode = LockMode.None): E = ref.getAndLock(tx, lockMode)
+    def set(newValue: E, lockMode: LockMode = LockMode.None)(implicit tx: Transaction = getThreadLocalTx): E =
+        ref.setAndLock(tx, newValue, lockMode)
 
-    def set(newValue: E, lockMode: LockMode = LockMode.None): E = ref.setAndLock(newValue, lockMode)
+    def swap(newValue: E, lockMode: LockMode = LockMode.None)(implicit tx: Transaction = getThreadLocalTx): E =
+        ref.getAndSetAndLock(tx, newValue, lockMode)
 
-    def set(newValue: E, tx: Transaction, lockMode: LockMode = LockMode.None): E = ref.setAndLock(tx, newValue, lockMode)
-
-    def swap(newValue: E, tx: Transaction, lockMode: LockMode = LockMode.None): E = ref.getAndSetAndLock(tx, newValue, lockMode)
-
-    def swap(newValue: E, lockMode: LockMode = LockMode.None): E = ref.getAndSetAndLock(newValue, lockMode)
-
-    def alter(f: (E) => E, lockMode: LockMode = LockMode.None): E = alter(f, AkkaStm.getThreadLocalTransaction, lockMode)
-
-    def alter(f: (E) => E, tx: Transaction, lockMode: LockMode = LockMode.None): E = {
+    def alter(f: (E) => E, lockMode: LockMode = LockMode.None)(implicit tx: Transaction = getThreadLocalTx): E = {
         val tranlocal = ref.openForWrite(tx.asInstanceOf[GammaTransaction], lockMode.asInt())
         val result = f(tranlocal.ref_value.asInstanceOf[E])
         tranlocal.ref_value = result
         result
     }
 
-    def isNull(): Boolean = ref.isNull()
+    def isNull(implicit tx: Transaction = getThreadLocalTx): Boolean = ref.isNull(tx)
 
-    def isNull(tx: Transaction): Boolean = ref.isNull(tx)
+    def commute(f: (E) => E)(implicit tx: Transaction = getThreadLocalTx): Unit = throw new TodoException()
 
-    def commute(f: (E) => E): Unit = throw new TodoException()
+    def awaitNotNullAndGet(implicit tx: Transaction = getThreadLocalTx): E = ref.awaitNotNullAndGet(tx)
 
-    def commute(f: (E) => E, tx: Transaction): Unit = throw new TodoException()
-
-    def awaitNotNullAndGet(): E = ref.awaitNotNullAndGet
-
-    def awaitNotNullAndGet(tx: Transaction): E = ref.awaitNotNullAndGet(tx)
-
-    def await(f: (E) => Boolean, lockMode: LockMode = LockMode.None) = {
+    def await(f: (E) => Boolean, lockMode: LockMode = LockMode.None)(implicit tx: Transaction = getThreadLocalTx) = {
         if (!f(ref.getAndLock(lockMode))) AkkaStm.retry()
-    }
-
-    def await(f: (E) => Boolean, tx: Transaction, lockMode: LockMode = LockMode.None) = {
-        if (!f(ref.getAndLock(tx, lockMode))) tx.retry()
     }
 }
 
 final class IntRef(value: Int = 0) {
 
+    import AkkaStm._
+
     private val ref = new GammaIntRef(GlobalStmInstance.getGlobalStmInstance().asInstanceOf[GammaStm], value);
     val lock: AkkaLock = new AkkaLockImpl(ref)
 
     val view = new View[Int] {
-        def swap(newValue: Int) = {
-            val tx = AkkaStm.getThreadLocalTransaction
-            if (tx eq null) ref.atomicGetAndSet(newValue) else IntRef.this.swap(newValue, tx)
+
+        override def get = {
+            implicit val tx = getThreadLocalTx
+            if (tx eq null) ref.atomicGet() else IntRef.this.get()()
         }
 
-        def set(newValue: Int) = {
-            val tx = AkkaStm.getThreadLocalTransaction
-            if (tx eq null) ref.atomicSet(newValue) else IntRef.this.set(newValue, tx)
+        override def swap(newValue: Int) = {
+            implicit val tx = getThreadLocalTx
+            if (tx eq null) ref.atomicGetAndSet(newValue) else IntRef.this.swap(newValue)
         }
 
-        def get(): Int = {
-            val tx = AkkaStm.getThreadLocalTransaction
-            if (tx eq null) ref.atomicGet() else IntRef.this.get(tx)
+        override def set(newValue: Int) = {
+            implicit val tx = getThreadLocalTx
+            if (tx eq null) ref.atomicSet(newValue) else IntRef.this.set(newValue)
         }
 
-        def alter(f: (Int) => Int): Int = {
-            val tx = AkkaStm.getThreadLocalTransaction
-            if (tx eq null) throw new TodoException() else IntRef.this.alter(f, tx)
+        override def alter(f: (Int) => Int) = {
+            val tx = getThreadLocalTx
+            if (tx eq null) throw new TodoException() else IntRef.this.alter(f)
         }
     }
 
     val atom = new NumberAtom[Int] {
-        def swap(newValue: Int) = ref.atomicGetAndSet(newValue)
 
-        def set(newValue: Int) = ref.atomicSet(newValue)
+        override def get = ref.atomicGet
 
-        def get(): Int = ref.atomicGet
+        override def weakGet = ref.atomicWeakGet
 
-        def alter(f: (Int) => Int): Int = throw new TodoException()
+        override def swap(newValue: Int) = ref.atomicGetAndSet(newValue)
 
-        def weakGet(): Int = ref.atomicWeakGet
+        override def set(newValue: Int) = ref.atomicSet(newValue)
 
-        def compareAndSet(expectedValue: Int, newValue: Int): Boolean = ref.atomicCompareAndSet(expectedValue, newValue)
+        override def alter(f: (Int) => Int) = throw new TodoException()
 
-        def atomicInc(amount: Int = 1): Int = ref.atomicIncrementAndGet(amount)
+        override def compareAndSet(expectedValue: Int, newValue: Int) = ref.atomicCompareAndSet(expectedValue, newValue)
 
-        def atomicDec(amount: Int = 1): Int = ref.atomicIncrementAndGet(-1 * amount)
+        override def atomicInc(amount: Int = 1) = ref.atomicIncrementAndGet(amount)
+
+        override def atomicDec(amount: Int = 1) = ref.atomicIncrementAndGet(-1 * amount)
     }
 
-    def get(lockMode: LockMode = LockMode.None): Int = ref.getAndLock(lockMode)
+    def get(lockMode: LockMode = LockMode.None)(implicit tx: Transaction = getThreadLocalTx): Int =
+        ref.getAndLock(tx, lockMode)
 
-    def get(tx: Transaction, lockMode: LockMode = LockMode.None): Int = ref.getAndLock(tx, lockMode)
+    def set(newValue: Int, lockMode: LockMode = LockMode.None)(implicit tx: Transaction = getThreadLocalTx): Int =
+        ref.setAndLock(tx, newValue, lockMode)
 
-    def set(newValue: Int, lockMode: LockMode = LockMode.None): Int = ref.setAndLock(newValue, lockMode)
+    def swap(newValue: Int, lockMode: LockMode = LockMode.None)(implicit tx: Transaction = getThreadLocalTx): Int =
+        ref.getAndSetAndLock(tx, newValue, lockMode)
 
-    def set(newValue: Int, tx: Transaction, lockMode: LockMode = LockMode.None): Int = ref.setAndLock(tx, newValue, lockMode)
+    def incAndGet(amount: Int = 1)(implicit tx: Transaction = getThreadLocalTx): Int =
+        ref.incrementAndGet(tx, amount)
 
-    def swap(newValue: Int, tx: Transaction, lockMode: LockMode = LockMode.None): Int = ref.getAndSetAndLock(tx, newValue, lockMode)
+    def getAndInc(amount: Int = 1)(implicit tx: Transaction = getThreadLocalTx): Int =
+        ref.getAndIncrement(tx, amount)
 
-    def swap(newValue: Int, lockMode: LockMode = LockMode.None): Int = ref.getAndSetAndLock(newValue, lockMode)
+    def inc(amount: Int = 1)(implicit tx: Transaction = getThreadLocalTx): Unit =
+        ref.increment(tx, amount)
 
-    def incAndGet(amount: Int = 1): Int = ref.incrementAndGet(amount)
+    def dec(amount: Int = 1)(implicit tx: Transaction = getThreadLocalTx): Unit =
+        ref.decrement(tx, amount)
 
-    def incAndGet(amount: Int = 1, tx: Transaction): Int = ref.incrementAndGet(tx, amount)
-
-    def getAndInc(amount: Int = 1): Int = ref.getAndIncrement(amount)
-
-    def getAndInc(amount: Int = 1, tx: Transaction): Int = ref.getAndIncrement(tx, amount)
-
-    def inc(amount: Int = 1): Unit = ref.increment(amount)
-
-    def inc(amount: Int = 1, tx: Transaction): Unit = ref.increment(tx, amount)
-
-    def dec(amount: Int = 1): Unit = ref.decrement(amount)
-
-    def dec(amount: Int = 1, tx: Transaction): Unit = ref.decrement(tx, amount)
-
-    def alter(f: (Int) => Int, lockMode: LockMode = LockMode.None): Int =
-        alter(f, AkkaStm.getThreadLocalTransaction(), lockMode)
-
-    def alter(f: (Int) => Int, tx: Transaction, lockMode: LockMode = LockMode.None): Int = {
+    def alter(f: (Int) => Int, lockMode: LockMode = LockMode.None)(implicit tx: Transaction = getThreadLocalTx): Int = {
         val tranlocal = ref.openForWrite(tx.asInstanceOf[GammaTransaction], lockMode.asInt())
         val result = f(tranlocal.long_value.asInstanceOf[Int])
         tranlocal.long_value = result.asInstanceOf[Long]
         result
     }
 
-    def commute(f: (Int) => Int): Unit = throw new TodoException()
+    def commute(f: (Int) => Int)(implicit tx: Transaction = getThreadLocalTx): Unit = throw new TodoException()
 
-    def commute(f: (Int) => Int, tx: Transaction): Unit = throw new TodoException()
+    def await(value: Int)(implicit tx: Transaction = getThreadLocalTx) = ref.await(tx, value)
 
-    def await(value: Int) = ref.await(value)
-
-    def await(value: Int, tx: Transaction) = ref.await(tx, value)
-
-    def await(f: (Int) => Boolean, lockMode: LockMode = LockMode.None) = if (!f(ref.getAndLock(lockMode))) AkkaStm.retry()
-
-    def await(f: (Int) => Boolean, tx: Transaction, lockMode: LockMode = LockMode.None) = if (!f(ref.getAndLock(tx, lockMode))) tx.retry()
+    //def await(f: (Int) => Boolean, tx: Transaction, lockMode: LockMode = LockMode.None) = if (!f(ref.getAndLock(tx, lockMode))) tx.retry()
 }
 
 final class DoubleRef(value: Double = 0) {
+
+    import AkkaStm._
 
     private val ref = new GammaDoubleRef(GlobalStmInstance.getGlobalStmInstance().asInstanceOf[GammaStm], value);
     val lock: AkkaLock = new AkkaLockImpl(ref)
 
     val view = new View[Double] {
-        def swap(newValue: Double) = {
-            val tx = AkkaStm.getThreadLocalTransaction
-            if (tx eq null) ref.atomicGetAndSet(newValue) else DoubleRef.this.swap(newValue, tx)
+
+        override def get() = {
+            implicit val tx = getThreadLocalTx
+            if (tx eq null) ref.atomicGet() else DoubleRef.this.get()
         }
 
-        def set(newValue: Double) = {
-            val tx = AkkaStm.getThreadLocalTransaction
-            if (tx eq null) ref.atomicSet(newValue) else DoubleRef.this.set(newValue, tx)
+        override def swap(newValue: Double) = {
+            implicit val tx = getThreadLocalTx
+            if (tx eq null) ref.atomicGetAndSet(newValue) else DoubleRef.this.swap(newValue)
         }
 
-        def get() = {
-            val tx = AkkaStm.getThreadLocalTransaction
-            if (tx eq null) ref.atomicGet() else DoubleRef.this.get(tx)
+        override def set(newValue: Double) = {
+            implicit val tx = getThreadLocalTx
+            if (tx eq null) ref.atomicSet(newValue) else DoubleRef.this.set(newValue)
         }
 
         def alter(f: (Double) => Double): Double = {
-            val tx = AkkaStm.getThreadLocalTransaction
-            if (tx eq null) throw new TodoException() else DoubleRef.this.alter(f, tx)
+            implicit val tx = getThreadLocalTx
+            if (tx eq null) throw new TodoException() else DoubleRef.this.alter(f)
         }
     }
 
     val atom = new NumberAtom[Double] {
-        def swap(newValue: Double) = ref.atomicGetAndSet(newValue)
 
-        def set(newValue: Double) = ref.atomicSet(newValue)
+        override def get = ref.atomicGet
 
-        def get(): Double = ref.atomicGet
+        override def weakGet = ref.atomicWeakGet
 
-        def alter(f: (Double) => Double): Double = throw new TodoException()
+        override def swap(newValue: Double) = ref.atomicGetAndSet(newValue)
 
-        def weakGet(): Double = ref.atomicWeakGet
+        override def set(newValue: Double) = ref.atomicSet(newValue)
 
-        def compareAndSet(expectedValue: Double, newValue: Double): Boolean = ref.atomicCompareAndSet(expectedValue, newValue)
+        override def alter(f: (Double) => Double) = throw new TodoException()
 
-        def atomicInc(amount: Double = 1): Double = ref.atomicIncrementAndGet(amount)
+        override def compareAndSet(expectedValue: Double, newValue: Double) = ref.atomicCompareAndSet(expectedValue, newValue)
 
-        def atomicDec(amount: Double = 1): Double = ref.atomicIncrementAndGet(-1 * amount)
+        override def atomicInc(amount: Double = 1) = ref.atomicIncrementAndGet(amount)
+
+        override def atomicDec(amount: Double = 1) = ref.atomicIncrementAndGet(-1 * amount)
     }
 
-    def get(lockMode: LockMode = LockMode.None): Double = ref.getAndLock(lockMode)
+    def get(lockMode: LockMode = LockMode.None)(implicit tx: Transaction = getThreadLocalTx): Double =
+        ref.getAndLock(tx, lockMode)
 
-    def get(tx: Transaction, lockMode: LockMode = LockMode.None): Double = ref.getAndLock(tx, lockMode)
+    def set(newValue: Double, lockMode: LockMode = LockMode.None)(implicit tx: Transaction = getThreadLocalTx): Double =
+        ref.setAndLock(tx, newValue, lockMode)
 
-    def set(newValue: Double, lockMode: LockMode = LockMode.None): Double = ref.setAndLock(newValue, lockMode)
+    def swap(newValue: Double, lockMode: LockMode = LockMode.None)(implicit tx: Transaction = getThreadLocalTx): Double =
+        ref.getAndSetAndLock(tx, newValue, lockMode)
 
-    def set(newValue: Double, tx: Transaction, lockMode: LockMode = LockMode.None): Double = ref.setAndLock(tx, newValue, lockMode)
+    def inc(amount: Double = 1)(implicit tx: Transaction = getThreadLocalTx): Unit =
+        ref.incrementAndGet(tx, amount)
 
-    def swap(newValue: Double, tx: Transaction, lockMode: LockMode = LockMode.None): Double = ref.getAndSetAndLock(tx, newValue, lockMode)
+    def getAndInc(amount: Double = 1)(implicit tx: Transaction = getThreadLocalTx): Double =
+        ref.getAndIncrement(tx, amount)
 
-    def swap(newValue: Double, lockMode: LockMode = LockMode.None): Double = ref.getAndSetAndLock(newValue, lockMode)
+    def dec(amount: Double = 1)(implicit tx: Transaction = getThreadLocalTx): Unit =
+        ref.incrementAndGet(tx, -amount)
 
-    def inc(amount: Double = 1): Unit = ref.incrementAndGet(amount)
-
-    def inc(amount: Double = 1, tx: Transaction): Unit = ref.incrementAndGet(tx, amount)
-
-    def incAndGet(amount: Double = 1): Double = ref.incrementAndGet(amount)
-
-    def incAndGet(amount: Double = 1, tx: Transaction): Double = ref.incrementAndGet(tx, amount)
-
-    def getAndInc(amount: Double = 1): Double = ref.getAndIncrement(amount)
-
-    def getAndInc(amount: Double = 1, tx: Transaction): Double = ref.getAndIncrement(tx, amount)
-
-    def dec(amount: Double = 1): Unit = ref.incrementAndGet(-amount)
-
-    def dec(amount: Double = 1, tx: Transaction): Unit = ref.incrementAndGet(tx, -amount)
-
-    def alter(f: (Double) => Double, lockMode: LockMode = LockMode.None): Double =
-        alter(f, AkkaStm.getThreadLocalTransaction(), lockMode)
-
-    def alter(f: (Double) => Double, tx: Transaction, lockMode: LockMode = LockMode.None): Double = {
+    def alter(f: (Double) => Double, lockMode: LockMode = LockMode.None)(implicit tx: Transaction = getThreadLocalTx): Double = {
         val tranlocal = ref.openForWrite(tx.asInstanceOf[GammaTransaction], lockMode.asInt())
         val result = f(GammaStmUtils.longAsDouble(tranlocal.long_value))
         tranlocal.long_value = GammaStmUtils.doubleAsLong(result)
         result
     }
 
-    def commute(f: (Double) => Double): Unit = throw new TodoException()
+    def commute(f: (Double) => Double)(implicit tx: Transaction = getThreadLocalTx): Unit =
+        throw new TodoException()
 
-    def commute(f: (Double) => Double, tx: Transaction): Unit = throw new TodoException()
+    //def await(value: Double)(implicit tx: Transaction = AkkaStm.getThreadLocalTx) =
+    //    ref.await(tx, value)
 
-    def await(value: Double) = ref.await(value)
-
-    def await(value: Double, tx: Transaction) = ref.await(tx, value)
-
-    def await(f: (Double) => Boolean, lockMode: LockMode = LockMode.None) = {
-        if (!f(ref.getAndLock(lockMode))) {
-            AkkaStm.retry()
-        }
-    }
-
-    def await(f: (Double) => Boolean, tx: Transaction, lockMode: LockMode = LockMode.None) = {
+    def await(f: (Double) => Boolean, lockMode: LockMode = LockMode.None)(implicit tx: Transaction = getThreadLocalTx) = {
         if (!f(ref.getAndLock(tx, lockMode))) {
             tx.retry()
         }
@@ -333,153 +284,144 @@ final class DoubleRef(value: Double = 0) {
 
 final class BooleanRef(value: Boolean = false) {
 
+    import AkkaStm._
+
     private val ref = new GammaBooleanRef(GlobalStmInstance.getGlobalStmInstance().asInstanceOf[GammaStm], value);
     val lock: AkkaLock = new AkkaLockImpl(ref)
 
     val view = new View[Boolean] {
-        def swap(newValue: Boolean) = {
-            val tx = AkkaStm.getThreadLocalTransaction
-            if (tx eq null) ref.atomicGetAndSet(newValue) else BooleanRef.this.swap(newValue, tx)
+
+        override def get = {
+            val tx = getThreadLocalTx
+            if (tx eq null) ref.atomicGet() else ref.get(tx)
         }
 
-        def set(newValue: Boolean) = {
-            val tx = AkkaStm.getThreadLocalTransaction
-            if (tx eq null) ref.atomicSet(newValue) else BooleanRef.this.set(newValue, tx)
+        override def swap(newValue: Boolean) = {
+            val tx = getThreadLocalTx
+            if (tx eq null) ref.atomicGetAndSet(newValue) else ref.getAndSet(tx, newValue)
         }
 
-        def get() = {
-            val tx = AkkaStm.getThreadLocalTransaction
-            if (tx eq null) ref.atomicGet() else BooleanRef.this.get(tx)
+        override def set(newValue: Boolean) = {
+            val tx = getThreadLocalTx
+            if (tx eq null) ref.atomicSet(newValue) else ref.set(tx, newValue)
         }
 
-        def alter(f: (Boolean) => Boolean): Boolean = {
-            val tx = AkkaStm.getThreadLocalTransaction
-            if (tx eq null) throw new TodoException() else BooleanRef.this.alter(f, tx)
+        override def alter(f: (Boolean) => Boolean) = {
+            implicit val tx = getThreadLocalTx
+            if (tx eq null) throw new TodoException() else BooleanRef.this.alter(f)
         }
     }
 
     val atom = new Atom[Boolean] {
-        def swap(newValue: Boolean) = ref.atomicGetAndSet(newValue)
 
-        def set(newValue: Boolean) = ref.atomicSet(newValue)
+        override def get = ref.atomicGet
 
-        def get(): Boolean = ref.atomicGet
+        override def weakGet = ref.atomicWeakGet
 
-        def alter(f: (Boolean) => Boolean): Boolean = throw new TodoException()
+        override def swap(newValue: Boolean) = ref.atomicGetAndSet(newValue)
 
-        def weakGet(): Boolean = ref.atomicWeakGet
+        override def set(newValue: Boolean) = ref.atomicSet(newValue)
 
-        def compareAndSet(expectedValue: Boolean, newValue: Boolean): Boolean = ref.atomicCompareAndSet(expectedValue, newValue)
+        override def alter(f: (Boolean) => Boolean) = throw new TodoException()
+
+        override def compareAndSet(expectedValue: Boolean, newValue: Boolean) = ref.atomicCompareAndSet(expectedValue, newValue)
     }
 
-    def get(lockMode: LockMode = LockMode.None): Boolean = ref.getAndLock(lockMode)
+    def get(lockMode: LockMode = LockMode.None)(implicit tx: Transaction = getThreadLocalTx): Boolean =
+        ref.getAndLock(tx, lockMode)
 
-    def get(tx: Transaction, lockMode: LockMode = LockMode.None): Boolean = ref.getAndLock(tx, lockMode)
+    def set(newValue: Boolean, lockMode: LockMode = LockMode.None)(implicit tx: Transaction = getThreadLocalTx): Boolean =
+        ref.setAndLock(tx, newValue, lockMode)
 
-    def set(newValue: Boolean, lockMode: LockMode = LockMode.None): Boolean = ref.setAndLock(newValue, lockMode)
+    def swap(newValue: Boolean, lockMode: LockMode = LockMode.None)(implicit tx: Transaction = getThreadLocalTx): Boolean =
+        ref.getAndSetAndLock(tx, newValue, lockMode)
 
-    def set(newValue: Boolean, tx: Transaction, lockMode: LockMode = LockMode.None): Boolean = ref.setAndLock(tx, newValue, lockMode)
-
-    def swap(newValue: Boolean, tx: Transaction, lockMode: LockMode = LockMode.None): Boolean = ref.getAndSetAndLock(tx, newValue, lockMode)
-
-    def swap(newValue: Boolean, lockMode: LockMode = LockMode.None): Boolean = ref.getAndSetAndLock(newValue, lockMode)
-
-    def alter(f: (Boolean) => Boolean, lockMode: LockMode = LockMode.None): Boolean =
-        alter(f, AkkaStm.getThreadLocalTransaction(), lockMode)
-
-    def alter(f: (Boolean) => Boolean, tx: Transaction, lockMode: LockMode = LockMode.None): Boolean = {
+    def alter(f: (Boolean) => Boolean, lockMode: LockMode = LockMode.None)(implicit tx: Transaction = getThreadLocalTx): Boolean = {
         val tranlocal = ref.openForWrite(tx.asInstanceOf[GammaTransaction], lockMode.asInt())
         val result = f(GammaStmUtils.longAsBoolean(tranlocal.long_value))
         tranlocal.long_value = GammaStmUtils.booleanAsLong(result)
         result
     }
 
-    def commute(f: (Boolean) => Boolean): Unit = throw new TodoException()
+    def commute(f: (Boolean) => Boolean)(implicit tx: Transaction = getThreadLocalTx): Unit =
+        throw new TodoException()
 
-    def commute(f: (Boolean) => Boolean, tx: Transaction): Unit = throw new TodoException()
-
-    def await(value: Boolean) = ref.await(value)
-
-    def await(value: Boolean, tx: Transaction) = ref.await(tx, value)
+    def await(value: Boolean)(implicit tx: Transaction = getThreadLocalTx) =
+        ref.await(tx, value)
 }
 
 
 final class LongRef(value: Long = 0) {
 
+    import AkkaStm._
+
     private val ref = new GammaLongRef(GlobalStmInstance.getGlobalStmInstance().asInstanceOf[GammaStm], value);
     val lock: AkkaLock = new AkkaLockImpl(ref)
 
     val view = new View[Long] {
-        def swap(newValue: Long) = {
-            val tx = AkkaStm.getThreadLocalTransaction
-            if (tx eq null) ref.atomicGetAndSet(newValue) else LongRef.this.swap(newValue, tx)
+
+        override def get = {
+            val tx = getThreadLocalTx
+            if (tx eq null) ref.atomicGet() else ref.get(tx)
         }
 
-        def set(newValue: Long) = {
-            val tx = AkkaStm.getThreadLocalTransaction
-            if (tx eq null) ref.atomicSet(newValue) else LongRef.this.set(newValue, tx)
+        override def swap(newValue: Long) = {
+            val tx = getThreadLocalTx
+            if (tx eq null) ref.atomicGetAndSet(newValue) else ref.getAndSet(tx, newValue)
         }
 
-        def get() = {
-            val tx = AkkaStm.getThreadLocalTransaction
-            if (tx eq null) ref.atomicGet() else LongRef.this.get(tx)
+        override def set(newValue: Long) = {
+            val tx = getThreadLocalTx
+            if (tx eq null) ref.atomicSet(newValue) else ref.set(tx, newValue)
         }
 
-        def alter(f: (Long) => Long): Long = {
-            val tx = AkkaStm.getThreadLocalTransaction
-            if (tx eq null) throw new TodoException() else LongRef.this.alter(f, tx)
+        def alter(f: (Long) => Long) = {
+            implicit val tx = getThreadLocalTx
+            if (tx eq null) throw new TodoException() else LongRef.this.alter(f)
         }
     }
 
     val atom = new NumberAtom[Long] {
-        def swap(newValue: Long) = ref.atomicGetAndSet(newValue)
 
-        def set(newValue: Long) = ref.atomicSet(newValue)
+        override def get = ref.atomicGet
 
-        def get(): Long = ref.atomicGet
+        override def weakGet = ref.atomicWeakGet
 
-        def alter(f: (Long) => Long): Long = throw new TodoException()
+        override def swap(newValue: Long) = ref.atomicGetAndSet(newValue)
 
-        def weakGet(): Long = ref.atomicWeakGet
+        override def set(newValue: Long) = ref.atomicSet(newValue)
 
-        def compareAndSet(expectedValue: Long, newValue: Long): Boolean = ref.atomicCompareAndSet(expectedValue, newValue)
+        override def alter(f: (Long) => Long) = throw new TodoException()
 
-        def atomicInc(amount: Long = 1): Long = ref.atomicIncrementAndGet(amount)
+        override def compareAndSet(expectedValue: Long, newValue: Long) = ref.atomicCompareAndSet(expectedValue, newValue)
 
-        def atomicDec(amount: Long = 1): Long = ref.atomicIncrementAndGet(-1 * amount)
+        override def atomicInc(amount: Long = 1) = ref.atomicIncrementAndGet(amount)
+
+        override def atomicDec(amount: Long = 1): Long = ref.atomicIncrementAndGet(-1 * amount)
     }
 
-    def get(tx: Transaction, lockMode: LockMode = LockMode.None): Long = ref.getAndLock(tx, lockMode)
+    def get(lockMode: LockMode = LockMode.None)(implicit tx: Transaction = getThreadLocalTx): Long =
+        ref.getAndLock(tx, lockMode)
 
-    def get(lockMode: LockMode = LockMode.None): Long = ref.getAndLock(lockMode)
+    def set(newValue: Long, lockMode: LockMode = LockMode.None)(implicit tx: Transaction = getThreadLocalTx): Long =
+        ref.setAndLock(tx, newValue, lockMode)
 
-    def set(newValue: Long, lockMode: LockMode = LockMode.None): Long = ref.setAndLock(newValue, lockMode)
+    def swap(newValue: Long, lockMode: LockMode = LockMode.None)(implicit tx: Transaction = getThreadLocalTx): Long =
+        ref.getAndSetAndLock(tx, newValue, lockMode)
 
-    def set(newValue: Long, tx: Transaction, lockMode: LockMode = LockMode.None): Long = ref.setAndLock(tx, newValue, lockMode)
+    def inc(amount: Long = 1)(implicit tx: Transaction = getThreadLocalTx): Unit =
+        ref.increment(tx, amount)
 
-    def swap(newValue: Long, lockMode: LockMode = LockMode.None): Long = ref.getAndSetAndLock(newValue, lockMode)
+    def dec(amount: Long = 1)(implicit tx: Transaction = getThreadLocalTx): Unit =
+        ref.decrement(tx, amount)
 
-    def swap(newValue: Long, tx: Transaction, lockMode: LockMode = LockMode.None): Long = ref.getAndSetAndLock(tx, newValue, lockMode)
+    def incAndGet(amount: Long = 1)(implicit tx: Transaction = getThreadLocalTx): Long =
+        ref.incrementAndGet(tx, amount)
 
-    def inc(amount: Long = 1): Unit = ref.increment(amount)
+    def getAndInc(amount: Long = 1)(implicit tx: Transaction = getThreadLocalTx): Long =
+        ref.getAndIncrement(tx, amount)
 
-    def inc(amount: Long = 1, tx: Transaction): Unit = ref.increment(tx, amount)
-
-    def dec(amount: Long = 1): Unit = ref.decrement(amount)
-
-    def dec(amount: Long = 1, tx: Transaction): Unit = ref.decrement(tx, amount)
-
-    def incAndGet(amount: Long = 1): Long = ref.incrementAndGet(amount)
-
-    def incAndGet(amount: Long = 1, tx: Transaction): Long = ref.incrementAndGet(tx, amount)
-
-    def getAndInc(amount: Long = 1): Long = ref.getAndIncrement(amount)
-
-    def getAndInc(amount: Long = 1, tx: Transaction): Long = ref.getAndIncrement(tx, amount)
-
-    def alter(f: (Long) => Long, lockMode: LockMode = LockMode.None): Long = alter(f, AkkaStm.getThreadLocalTransaction(), lockMode)
-
-    def alter(f: (Long) => Long, tx: Transaction, lockMode: LockMode = LockMode.None): Long = {
+    def alter(f: (Long) => Long, lockMode: LockMode = LockMode.None)(implicit tx: Transaction = getThreadLocalTx): Long = {
         val tranlocal = ref.openForWrite(tx.asInstanceOf[GammaTransaction], lockMode.asInt())
         val result = f(tranlocal.long_value)
         tranlocal.long_value = result
@@ -488,19 +430,9 @@ final class LongRef(value: Long = 0) {
 
     def commute(f: (Long) => Long): Unit = throw new TodoException()
 
-    def commute(f: (Long) => Long, tx: Transaction): Unit = throw new TodoException()
+    //def await(value: Long)(implicit tx: Transaction = AkkaStm.getThreadLocalTx()) = ref.await(tx, value)
 
-    def await(value: Long) = ref.await(value)
-
-    def await(value: Long, tx: Transaction) = ref.await(tx, value)
-
-    def await(f: (Long) => Boolean, lockMode: LockMode = LockMode.None) = {
-        if (!f(ref.getAndLock(lockMode))) {
-            AkkaStm.retry()
-        }
-    }
-
-    def await(f: (Long) => Boolean, tx: Transaction, lockMode: LockMode = LockMode.None) = {
+    def await(f: (Long) => Boolean, lockMode: LockMode = LockMode.None)(implicit tx: Transaction = getThreadLocalTx) = {
         if (!f(ref.getAndLock(tx, lockMode))) {
             tx.retry()
         }
@@ -566,6 +498,7 @@ class LeanTxExecutor(txFactory: GammaTransactionFactory) extends TxExecutor {
 }
 
 trait TxExecutor {
+
     def apply[@specialized E](block: (Transaction) => E): E;
 }
 
@@ -631,52 +564,105 @@ trait AkkaLock {
 
 class AkkaLockImpl(val lock: Lock) extends AkkaLock {
 
-    def atomicGetLockMode(): LockMode = lock.atomicGetLockMode
+    override def atomicGetLockMode() = lock.atomicGetLockMode
 
-    def getLockMode(tx: Transaction): LockMode = lock.getLockMode(tx)
+    override def getLockMode(tx: Transaction) = lock.getLockMode(tx)
 
-    def acquire(tx: Transaction, desiredLockMode: LockMode): Unit = lock.acquire(tx, desiredLockMode)
+    override def acquire(tx: Transaction, desiredLockMode: LockMode) = lock.acquire(tx, desiredLockMode)
 }
 
 class TxExecutorConfigurer(val builder: GammaTransactionFactoryBuilder) {
 
-    def setControlFlowErrorsReused(reused: Boolean) = new TxExecutorConfigurer(builder.setControlFlowErrorsReused(reused))
+    def withControlFlowErrorsReused(reused: Boolean) = {
+        if(builder.getConfiguration.isControlFlowErrorsReused) this
+        else new TxExecutorConfigurer(builder.setControlFlowErrorsReused(reused))
+    }
 
-    def setFamilyName(familyName: String) = new TxExecutorConfigurer(builder.setFamilyName(familyName))
+    def withFamilyName(familyName: String) = {
+        if(familyName eq builder.getConfiguration.getFamilyName) this
+        else new TxExecutorConfigurer(builder.setFamilyName(familyName))
+    }
 
-    def setPropagationLevel(propagationLevel: PropagationLevel) = new TxExecutorConfigurer(builder.setPropagationLevel(propagationLevel))
+    def withPropagationLevel(propagationLevel: PropagationLevel) = {
+        if(propagationLevel eq builder.getConfiguration.getPropagationLevel) this
+        else new TxExecutorConfigurer(builder.setPropagationLevel(propagationLevel))
+    }
 
-    def setReadLockMode(lockMode: LockMode) = new TxExecutorConfigurer(builder.setReadLockMode(lockMode))
+    def withReadLockMode(lockMode: LockMode) = {
+        if(lockMode eq builder.getConfiguration.getReadLockMode) this
+        else new TxExecutorConfigurer(builder.setReadLockMode(lockMode))
+    }
 
-    def setWriteLockMode(lockMode: LockMode) = new TxExecutorConfigurer(builder.setWriteLockMode(lockMode))
+    def withWriteLockMode(lockMode: LockMode) = {
+        if(lockMode eq builder.getConfiguration.getWriteLockMode)this
+        else new TxExecutorConfigurer(builder.setWriteLockMode(lockMode))
+    }
 
-    def addPermanentListener(listener: TransactionListener) = new TxExecutorConfigurer(builder.addPermanentListener(listener))
+    def withPermanentListener(listener: TransactionListener) =
+        new TxExecutorConfigurer(builder.addPermanentListener(listener))
 
-    def setTraceLevel(traceLevel: TraceLevel) = new TxExecutorConfigurer(builder.setTraceLevel(traceLevel))
+    def withTraceLevel(traceLevel: TraceLevel) = {
+        if(traceLevel eq builder.getConfiguration.traceLevel) this
+        else new TxExecutorConfigurer(builder.setTraceLevel(traceLevel))
+    }
 
-    def setTimeoutNs(timeoutNs: Long) = new TxExecutorConfigurer(builder.setTimeoutNs(timeoutNs))
+    def withRetryTimeoutNs(timeout: Long, unit: TimeUnit = TimeUnit.SECONDS) = {
+        val timeoutNs = unit.toNanos(timeout)
+        if(timeoutNs == builder.getConfiguration.getTimeoutNs) this
+        else new TxExecutorConfigurer(builder.setTimeoutNs(timeoutNs))
+    }
 
-    def setInterruptible(interruptible: Boolean) = new TxExecutorConfigurer(builder.setInterruptible(interruptible))
+    def withInterruptible(interruptible: Boolean) = {
+        if(interruptible == builder.getConfiguration.isInterruptible) this
+        else new TxExecutorConfigurer(builder.setInterruptible(interruptible))
+    }
 
-    def setBackoffPolicy(backoffPolicy: BackoffPolicy) = new TxExecutorConfigurer(builder.setBackoffPolicy(backoffPolicy))
+    def withBackoffPolicy(backoffPolicy: BackoffPolicy) = {
+        if(backoffPolicy eq builder.getConfiguration.getBackoffPolicy) this
+        else new TxExecutorConfigurer(builder.setBackoffPolicy(backoffPolicy))
+    }
 
-    def setDirtyCheckEnabled(dirtyCheckEnabled: Boolean) = new TxExecutorConfigurer(builder.setDirtyCheckEnabled(dirtyCheckEnabled))
+    def withDirtyCheck(dirtyCheckEnabled: Boolean) = {
+        if(dirtyCheckEnabled == builder.getConfiguration.isDirtyCheckEnabled) this
+        else new TxExecutorConfigurer(builder.setDirtyCheckEnabled(dirtyCheckEnabled))
+    }
 
-    def setSpinCount(spinCount: Int) = new TxExecutorConfigurer(builder.setSpinCount(spinCount))
+    def withSpinCount(spinCount: Int) = {
+        if(spinCount == builder.getConfiguration.getSpinCount) this
+        else new TxExecutorConfigurer(builder.setSpinCount(spinCount))
+    }
 
-    def setReadonly(readonly: Boolean) = new TxExecutorConfigurer(builder.setReadonly(readonly))
+    def withReadonly(readonly: Boolean) = {
+        if(readonly == builder.getConfiguration.isReadonly) this
+        else new TxExecutorConfigurer(builder.setReadonly(readonly))
+    }
 
-    def setReadTrackingEnabled(enabled: Boolean) = new TxExecutorConfigurer(builder.setReadTrackingEnabled(enabled))
+    def withReadTrackingEnabled(enabled: Boolean) = {
+        if(enabled == builder.getConfiguration.isReadTrackingEnabled) this
+        else new TxExecutorConfigurer(builder.setReadTrackingEnabled(enabled))
+    }
 
-    def setSpeculative(speculative: Boolean) = new TxExecutorConfigurer(builder.setSpeculative(speculative))
+    def withSpeculation(speculative: Boolean) = {
+        if(speculative == builder.getConfiguration.isSpeculative) this
+        else new TxExecutorConfigurer(builder.setSpeculative(speculative))
+    }
 
-    def setMaxRetries(maxRetries: Int) = new TxExecutorConfigurer(builder.setMaxRetries(maxRetries))
+    def withMaxRetries(maxRetries: Int) = {
+        if(maxRetries == builder.getConfiguration.getMaxRetries) this
+        else new TxExecutorConfigurer(builder.setMaxRetries(maxRetries))
+    }
 
-    def setIsolationLevel(isolationLevel: IsolationLevel) = new TxExecutorConfigurer(builder.setIsolationLevel(isolationLevel))
+    def withIsolationLevel(isolationLevel: IsolationLevel) = {
+        if(isolationLevel eq builder.getConfiguration.getIsolationLevel) this
+        else new TxExecutorConfigurer(builder.setIsolationLevel(isolationLevel))
+    }
 
-    def setBlockingAllowed(blockingAllowed: Boolean) = new TxExecutorConfigurer(builder.setBlockingAllowed(blockingAllowed))
+    def withBlockingAllowed(blockingAllowed: Boolean) = {
+        if(blockingAllowed == builder.getConfiguration.isBlockingAllowed) this
+        else new TxExecutorConfigurer(builder.setBlockingAllowed(blockingAllowed))
+    }
 
-    def setJtaEnabled() = {
+    def withJtaEnabled() = {
         //just an example how the permanent listeners can be added to add your own logic that will always be executed.
         //no need to register the individual listeners anymore (also makes it faster).
         val listener = new TransactionListener() {
@@ -719,11 +705,35 @@ object AkkaStm extends RefFactory {
     val defaultTxExecutor = new LeanTxExecutor(
         gammaStm.newTransactionFactoryBuilder().newTransactionFactory())
 
-    def getThreadLocalTransaction(): Transaction = ThreadLocalTransaction.getThreadLocalTransaction()
+    def getThreadLocalTx(): Transaction = ThreadLocalTransaction.getThreadLocalTransaction()
 
     def apply[@specialized E](block: (Transaction) => E): E = defaultTxExecutor.apply(block)
 
-    def isControlFlow(x: Throwable): Boolean = x.isInstanceOf[ControlFlowError]
+    //compared to the original approach, this approach prevents wrapping the f in a runnable and that inside an transactionlistener.
+    //now the f is wrapped
+    def deferred(f: Unit => Unit): Unit = {
+        getThreadLocalTx match {
+            case null => throw new TransactionRequiredException
+            case tx: GammaTransaction => tx.register(new TransactionListener {
+                def notify(tx: Transaction, e: TransactionEvent) =
+                    e match {
+                        case TransactionEvent.PostCommit => f()
+                    }
+            })
+        }
+    }
+
+    def compensating(f: Unit => Unit): Unit = {
+        getThreadLocalTx match {
+            case null => throw new TransactionRequiredException
+            case tx: GammaTransaction => tx.register(new TransactionListener {
+                def notify(tx: Transaction, e: TransactionEvent) =
+                    e match {
+                        case TransactionEvent.PostAbort => f()
+                    }
+            })
+        }
+    }
 
     def retry() = StmUtils.retry
 
@@ -737,7 +747,7 @@ object AkkaStm extends RefFactory {
 
     def newDoubleRef(value: Double = 0) = new DoubleRef(value)
 
-    def newRef[E](): Ref[E] = new Ref[E]()
+    def newRef[E]() = new Ref[E]()
 }
 
 //todo: perhaps that the DynamicVariable could be the replacement for this.
@@ -771,7 +781,8 @@ class Agent[E](initial: E) {
 
     new Thread() {
         setDaemon(true)
-        def run() {
+
+        override def run() {
             while (true) {
                 value = queue.take()(value)
             }

@@ -5,7 +5,7 @@ import org.multiverse.api.Transaction
 import AkkaStm._
 
 object Example {
-    val atomicBlock = newTxExecutorConfigurer.setReadonly(true).newTxExecutor
+    val atomicBlock = newTxExecutorConfigurer.withReadonly(true).newTxExecutor
 
     def main(args: Array[String]) {
         test1()
@@ -16,7 +16,7 @@ object Example {
     def test3() = {
         val ref = new Ref[String]
 
-        atomicBlock.apply((tx: Transaction) => ref.set(ref.get(tx) + "foo", tx))
+        atomicBlock.apply((tx: Transaction) => ref.set(ref.get() + "foo"))
 
         println(ref.atom.get())
     }
@@ -24,7 +24,7 @@ object Example {
     def test1() = {
         val ref = new Ref[String]
         apply((tx: Transaction) =>
-            ref.set(ref.get(tx) + "foo", tx)
+            ref.set(ref.get() + "foo")
         //    ref.value = ref.value + "foo"
         )
         println(ref.atom.get())
@@ -33,7 +33,7 @@ object Example {
     def test2() = {
         val ref = new IntRef
         apply((tx: Transaction) =>
-            ref.set(ref.get(tx) + 1, tx)
+            ref.set(ref.get() + 1)
 
         )
         println(ref.atom.get())
