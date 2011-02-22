@@ -740,6 +740,7 @@ object AkkaStm extends RefFactory {
     def newRef[E](): Ref[E] = new Ref[E]()
 }
 
+//todo: perhaps that the DynamicVariable could be the replacement for this.
 class Var[@specialized E] {
     final val threadlocal = new ThreadLocal[E];
 
@@ -763,11 +764,13 @@ class Var[@specialized E] {
     }
 }
 
+//extremely naive agent implementation
 class Agent[E](initial: E) {
     @volatile var value = initial
     val queue = new LinkedBlockingQueue[(E) => E]
 
     new Thread() {
+        setDaemon(true)
         def run() {
             while (true) {
                 value = queue.take()(value)
