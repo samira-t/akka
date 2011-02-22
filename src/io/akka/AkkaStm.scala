@@ -6,7 +6,7 @@ import lifecycle.{TransactionEvent, TransactionListener}
 import org.multiverse.stms.gamma.transactions.{GammaTransactionFactoryBuilder, GammaTransactionFactory, GammaTransaction, GammaTransactionPool}
 import org.multiverse.stms.gamma.transactionalobjects._
 import javax.transaction.TransactionRequiredException
-import java.util.concurrent.{TimeUnit, LinkedBlockingQueue}
+import java.util.concurrent.TimeUnit
 import org.multiverse.stms.gamma.{GammaStmUtils, GammaStm}
 import org.multiverse.MultiverseConstants
 
@@ -44,7 +44,7 @@ final class Ref[E] {
 
         override def alter(f: (E) => E) = {
             val tx = getThreadLocalTx
-            if (tx eq null) throw new TodoException() else Ref.this.alter(f)(tx)
+            if (tx eq null) atom.alter(f) else Ref.this.alter(f)(tx)
         }
     }
     val atom = new RefAtom[E] {
@@ -66,7 +66,9 @@ final class Ref[E] {
 
         override def set(newValue: E) = ref.atomicSet(newValue)
 
-        override def alter(f: (E) => E) = throw new TodoException()
+        override def alter(f: (E) => E) = ref.atomicAlterAndGet(new org.multiverse.api.functions.Function[E]{
+            override def call(value: E) = f(value)
+        })
 
         override def compareAndSet(expectedValue: E, newValue: E) = ref.atomicCompareAndSet(expectedValue, newValue)
     }
@@ -103,7 +105,11 @@ final class Ref[E] {
 
     def isNull(implicit tx: Transaction = getThreadLocalTx): Boolean = ref.isNull(tx)
 
-    def commute(f: (E) => E)(implicit tx: Transaction = getThreadLocalTx): Unit = throw new TodoException()
+    def commute(f: (E) => E)(implicit tx: Transaction = getThreadLocalTx): Unit = {
+        ref.commute(tx, new org.multiverse.api.functions.Function[E]{
+            override def call(v: E) = f(v)
+        })
+    }
 
     def awaitNotNullAndGet(implicit tx: Transaction = getThreadLocalTx): E = ref.awaitNotNullAndGet(tx)
 
@@ -138,7 +144,7 @@ final class IntRef(value: Int = 0) {
 
         override def alter(f: (Int) => Int) = {
             val tx = getThreadLocalTx
-            if (tx eq null) throw new TodoException() else IntRef.this.alter(f)
+            if (tx eq null) atom.alter(f) else IntRef.this.alter(f)
         }
     }
 
@@ -152,7 +158,9 @@ final class IntRef(value: Int = 0) {
 
         override def set(newValue: Int) = ref.atomicSet(newValue)
 
-        override def alter(f: (Int) => Int) = throw new TodoException()
+        override def alter(f: (Int) => Int) = ref.atomicAlterAndGet(new org.multiverse.api.functions.IntFunction{
+            override def call(value: Int) = f(value)
+        })
 
         override def compareAndSet(expectedValue: Int, newValue: Int) = ref.atomicCompareAndSet(expectedValue, newValue)
 
@@ -166,7 +174,6 @@ final class IntRef(value: Int = 0) {
         val result: Int = tranlocal.long_value.asInstanceOf[Int] * rhs
         tranlocal.long_value = result.asInstanceOf[Long]
     }
-
 
     def +=(rhs: Int)(implicit tx: Transaction = getThreadLocalTx): Unit = {
         val tranlocal = ref.openForWrite(tx.asInstanceOf[GammaTransaction], MultiverseConstants.LOCKMODE_NONE)
@@ -208,7 +215,11 @@ final class IntRef(value: Int = 0) {
         result
     }
 
-    def commute(f: (Int) => Int)(implicit tx: Transaction = getThreadLocalTx): Unit = throw new TodoException()
+    def commute(f: (Int) => Int)(implicit tx: Transaction = getThreadLocalTx): Unit =  {
+        ref.commute(tx, new org.multiverse.api.functions.IntFunction{
+            override def call(v: Int) = f(v)
+        })
+    }
 
     def await(value: Int)(implicit tx: Transaction = getThreadLocalTx) = ref.await(tx, value)
 
@@ -218,6 +229,7 @@ final class IntRef(value: Int = 0) {
 final class DoubleRef(value: Double = 0) {
 
     import AkkaStm._
+    import GammaStmUtils._
 
     private val ref = new GammaDoubleRef(GlobalStmInstance.getGlobalStmInstance().asInstanceOf[GammaStm], value);
     val lock: AkkaLock = new AkkaLockImpl(ref)
@@ -241,7 +253,7 @@ final class DoubleRef(value: Double = 0) {
 
         def alter(f: (Double) => Double): Double = {
             implicit val tx = getThreadLocalTx
-            if (tx eq null) throw new TodoException() else DoubleRef.this.alter(f)
+            if (tx eq null) atom.alter(f) else DoubleRef.this.alter(f)
         }
     }
 
@@ -255,7 +267,9 @@ final class DoubleRef(value: Double = 0) {
 
         override def set(newValue: Double) = ref.atomicSet(newValue)
 
-        override def alter(f: (Double) => Double) = throw new TodoException()
+        override def alter(f: (Double) => Double) = ref.atomicAlterAndGet(new org.multiverse.api.functions.DoubleFunction{
+            override def call(value: Double) = f(value)
+        })
 
         override def compareAndSet(expectedValue: Double, newValue: Double) = ref.atomicCompareAndSet(expectedValue, newValue)
 
@@ -266,21 +280,21 @@ final class DoubleRef(value: Double = 0) {
 
     def *=(rhs: Double)(implicit tx: Transaction = getThreadLocalTx): Unit = {
         val tranlocal = ref.openForWrite(tx.asInstanceOf[GammaTransaction], MultiverseConstants.LOCKMODE_NONE)
-        val result: Double = GammaStmUtils.longAsDouble(tranlocal.long_value) * rhs
-        tranlocal.long_value = GammaStmUtils.doubleAsLong(result)
+        val result: Double = longAsDouble(tranlocal.long_value) * rhs
+        tranlocal.long_value = doubleAsLong(result)
     }
 
 
     def +=(rhs: Int)(implicit tx: Transaction = getThreadLocalTx): Unit = {
         val tranlocal = ref.openForWrite(tx.asInstanceOf[GammaTransaction], MultiverseConstants.LOCKMODE_NONE)
-        val result: Double = GammaStmUtils.longAsDouble(tranlocal.long_value) + rhs
-        tranlocal.long_value = GammaStmUtils.doubleAsLong(result)
+        val result: Double = longAsDouble(tranlocal.long_value) + rhs
+        tranlocal.long_value = doubleAsLong(result)
     }
 
     def -=(rhs: Int)(implicit tx: Transaction = getThreadLocalTx): Unit = {
         val tranlocal = ref.openForWrite(tx.asInstanceOf[GammaTransaction], MultiverseConstants.LOCKMODE_NONE)
-        val result: Double = GammaStmUtils.longAsDouble(tranlocal.long_value) - rhs
-        tranlocal.long_value = GammaStmUtils.doubleAsLong(result)
+        val result: Double = longAsDouble(tranlocal.long_value) - rhs
+        tranlocal.long_value = doubleAsLong(result)
     }
 
     def get(lockMode: LockMode = LockMode.None)(implicit tx: Transaction = getThreadLocalTx): Double =
@@ -308,8 +322,11 @@ final class DoubleRef(value: Double = 0) {
         result
     }
 
-    def commute(f: (Double) => Double)(implicit tx: Transaction = getThreadLocalTx): Unit =
-        throw new TodoException()
+    def commute(f: (Double) => Double)(implicit tx: Transaction = getThreadLocalTx): Unit = {
+        ref.commute(tx, new org.multiverse.api.functions.DoubleFunction{
+            override def call(v: Double) = f(v)
+        })
+    }
 
     //def await(value: Double)(implicit tx: Transaction = AkkaStm.getThreadLocalTx) =
     //    ref.await(tx, value)
@@ -347,7 +364,7 @@ final class BooleanRef(value: Boolean = false) {
 
         override def alter(f: (Boolean) => Boolean) = {
             implicit val tx = getThreadLocalTx
-            if (tx eq null) throw new TodoException() else BooleanRef.this.alter(f)
+            if (tx eq null) atom.alter(f) else BooleanRef.this.alter(f)
         }
     }
 
@@ -361,7 +378,9 @@ final class BooleanRef(value: Boolean = false) {
 
         override def set(newValue: Boolean) = ref.atomicSet(newValue)
 
-        override def alter(f: (Boolean) => Boolean) = throw new TodoException()
+        override def alter(f: (Boolean) => Boolean) = ref.atomicAlterAndGet(new org.multiverse.api.functions.BooleanFunction{
+            override def call(value: Boolean) = f(value)
+        })
 
         override def compareAndSet(expectedValue: Boolean, newValue: Boolean) = ref.atomicCompareAndSet(expectedValue, newValue)
     }
@@ -382,8 +401,11 @@ final class BooleanRef(value: Boolean = false) {
         result
     }
 
-    def commute(f: (Boolean) => Boolean)(implicit tx: Transaction = getThreadLocalTx): Unit =
-        throw new TodoException()
+    def commute(f: (Boolean) => Boolean)(implicit tx: Transaction = getThreadLocalTx): Unit = {
+        ref.commute(tx, new org.multiverse.api.functions.BooleanFunction{
+            override def call(v: Boolean) = f(v)
+        })
+    }
 
     def await(value: Boolean)(implicit tx: Transaction = getThreadLocalTx) =
         ref.await(tx, value)
@@ -416,7 +438,7 @@ final class LongRef(value: Long = 0) {
 
         def alter(f: (Long) => Long) = {
             implicit val tx = getThreadLocalTx
-            if (tx eq null) throw new TodoException() else LongRef.this.alter(f)
+            if (tx eq null) atom.alter(f) else LongRef.this.alter(f)
         }
     }
 
@@ -483,7 +505,11 @@ final class LongRef(value: Long = 0) {
         result
     }
 
-    def commute(f: (Long) => Long): Unit = throw new TodoException()
+    def commute(f: (Long) => Long)(implicit tx: Transaction = getThreadLocalTx): Unit = {
+        ref.commute(tx, new org.multiverse.api.functions.LongFunction{
+            override def call(v: Long) = f(v)
+        })
+    }
 
     //def await(value: Long)(implicit tx: Transaction = AkkaStm.getThreadLocalTx()) = ref.await(tx, value)
 
@@ -803,48 +829,4 @@ object AkkaStm extends RefFactory {
     def newDoubleRef(value: Double = 0) = new DoubleRef(value)
 
     def newRef[E]() = new Ref[E]()
-}
-
-//todo: perhaps that the DynamicVariable could be the replacement for this.
-class Var[@specialized E] {
-    final val threadlocal = new ThreadLocal[E];
-
-    def get(): E = threadlocal.get
-
-    def alter(f: (E) => E): E = {
-        val result: E = f(threadlocal.get)
-        threadlocal.set(result)
-        result
-    }
-
-    def set(value: E): E = {
-        threadlocal.set(value)
-        value
-    }
-
-    def swap(value: E): E = {
-        val old = threadlocal.get
-        threadlocal.set(value)
-        old
-    }
-}
-
-//extremely naive agent implementation
-class Agent[E](initial: E) {
-    @volatile var value = initial
-    val queue = new LinkedBlockingQueue[(E) => E]
-
-    new Thread() {
-        setDaemon(true)
-
-        override def run() {
-            while (true) {
-                value = queue.take()(value)
-            }
-        }
-    }
-
-    def get(): E = value
-
-    def alter(f: (E) => E): Unit = queue.put(f)
 }
