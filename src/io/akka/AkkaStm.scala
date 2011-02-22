@@ -37,7 +37,7 @@ final class Ref[E] {
             if (result == null) defaultValue else result
         }
 
-        def opt()= Option(get())
+        def opt() = Option(get())
 
         def isNull(): Boolean = get() == null
     }
@@ -506,25 +506,26 @@ final class LongRef(value: Long = 0) {
     }
 }
 
-class LeanTxExecutor(transactionFactory: GammaTransactionFactory) extends TxExecutor {
-    val config = transactionFactory.getConfiguration
+class LeanTxExecutor(txFactory: GammaTransactionFactory) extends TxExecutor {
+    val config = txFactory.getConfiguration
     val backoffPolicy = config.getBackoffPolicy
 
     def apply[@specialized E](block: (Transaction) => E): E = {
-        val transactionContainer = ThreadLocalTransaction.getThreadLocalTransactionContainer();
-        var pool: GammaTransactionPool = transactionContainer.txPool.asInstanceOf[GammaTransactionPool]
-        if (pool eq null) {
-            pool = new GammaTransactionPool
-            transactionContainer.txPool = pool
-        }
+        val txContainer = ThreadLocalTransaction.getThreadLocalTransactionContainer();
 
-        var tx = transactionContainer.tx.asInstanceOf[GammaTransaction]
+        var tx = txContainer.tx.asInstanceOf[GammaTransaction]
         if (tx ne null) return block(tx)
 
-        tx = transactionFactory.newTransaction(pool)
-        transactionContainer.tx = tx
+        var pool = txContainer.txPool.asInstanceOf[GammaTransactionPool]
+        if (pool eq null) {
+            pool = new GammaTransactionPool
+            txContainer.txPool = pool
+        }
+
+        tx = txFactory.newTransaction(pool)
+        txContainer.tx = tx
         var cause: Throwable = null
-        var abort: Boolean = true
+        var abort = true
         try {
             do {
                 try {
@@ -541,10 +542,10 @@ class LeanTxExecutor(transactionFactory: GammaTransactionFactory) extends TxExec
                     case e: SpeculativeConfigurationError => {
                         cause = e
                         abort = false
-                        val old: GammaTransaction = tx
-                        tx = transactionFactory.upgradeAfterSpeculativeFailure(tx, pool)
-                        pool.put(old)
-                        transactionContainer.tx = tx
+                        val oldTx = tx
+                        tx = txFactory.upgradeAfterSpeculativeFailure(tx, pool)
+                        pool.put(oldTx)
+                        txContainer.tx = tx
                     }
                     case e: ReadWriteConflict => {
                         cause = e
@@ -555,7 +556,7 @@ class LeanTxExecutor(transactionFactory: GammaTransactionFactory) extends TxExec
         } finally {
             if (abort) tx.abort()
             pool.put(tx)
-            transactionContainer.tx = null
+            txContainer.tx = null
         }
 
         throw new TooManyRetriesException(
@@ -736,4 +737,21 @@ object AkkaStm extends RefFactory {
     def newDoubleRef(value: Double = 0) = new DoubleRef(value)
 
     def newRef[E](): Ref[E] = new Ref[E]()
+}
+
+class Var[E] {
+    final val threadlocal = new ThreadLocal[E];
+
+    def get():E = threadlocal.get
+
+    def set(value:E):E = {
+        threadlocal.set(value)
+        value
+    }
+
+    def swap(value:E):E = {
+        val old = threadlocal.get
+        threadlocal.set(value)
+        old
+    }
 }
