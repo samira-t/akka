@@ -2,6 +2,7 @@ package io.akka
 
 import org.multiverse.api._
 import exceptions._
+import functions.LongFunction
 import lifecycle.{TransactionEvent, TransactionListener}
 import org.multiverse.stms.gamma.transactions.{GammaTransactionFactoryBuilder, GammaTransactionFactory, GammaTransaction, GammaTransactionPool}
 import org.multiverse.stms.gamma.transactionalobjects._
@@ -121,6 +122,8 @@ final class Ref[E] {
     }
 
     def awaitNotNullAndGet(implicit tx: Transaction = getThreadLocalTx): E = ref.awaitNotNullAndGet(tx)
+
+    def awaitNull(implicit tx: Transaction = getThreadLocalTx): Unit = ref.awaitNull(tx)
 
     def toDebugString(): String = ref.toDebugString
 
@@ -247,9 +250,10 @@ final class IntRef(value: Int = 0) {
 
     def toString(implicit tx: Transaction = getThreadLocalTx): String = ref.toString(tx)
 
-    def await(value: Int)(implicit tx: Transaction = getThreadLocalTx) = ref.await(tx, value)
+    //def await(value: Int)(implicit tx: Transaction = getThreadLocalTx) = ref.await(tx, value)
 
-    //def await(f: (Int) => Boolean, tx: Transaction, lockMode: LockMode = LockMode.None) = if (!f(ref.getAndLock(tx, lockMode))) tx.retry()
+    def await(f: (Int) => Boolean, lockMode: LockMode = LockMode.None)(implicit tx: Transaction = getThreadLocalTx) =
+        if (!f(ref.getAndLock(tx, lockMode))) tx.retry()
 }
 
 final class DoubleRef(value: Double = 0) {
@@ -508,7 +512,9 @@ final class LongRef(value: Long = 0) {
 
         override def set(newValue: Long) = ref.atomicSet(newValue)
 
-        override def alter(f: (Long) => Long) = throw new TodoException()
+        override def alter(f: (Long) => Long) = ref.atomicAlterAndGet(new LongFunction {
+            def call(a: Long) = f(a)
+        })
 
         override def compareAndSet(expectedValue: Long, newValue: Long) = ref.atomicCompareAndSet(expectedValue, newValue)
 
@@ -642,6 +648,101 @@ class LeanTxExecutor(txFactory: GammaTransactionFactory) extends TxExecutor {
     }
 }
 
+class FatTxExecutor(txFactory: GammaTransactionFactory) extends TxExecutor {
+    val config = txFactory.getConfiguration
+    val backoffPolicy = config.getBackoffPolicy
+
+    def apply[@specialized E](block: (Transaction) => E): E = {
+        val txContainer = ThreadLocalTransaction.getThreadLocalTransactionContainer();
+        var pool = txContainer.txPool.asInstanceOf[GammaTransactionPool]
+        if (pool eq null) {
+            pool = new GammaTransactionPool
+            txContainer.txPool = pool
+        }
+
+        var tx = txContainer.tx.asInstanceOf[GammaTransaction]
+
+        config.propagationLevel match {
+            case PropagationLevel.Mandatory =>
+                if (tx eq null)
+                    throw new TransactionMandatoryException(
+                        format("No transaction is found for atomicblock '%s' with 'Mandatory' propagation level",
+                            config.familyName))
+                return block(tx)
+            case PropagationLevel.Never =>
+                if (tx ne null)
+                    throw new TransactionNotAllowedException(
+                        format("No transaction is allowed for atomicblock '%s' with propagation level 'Never'" +
+                            ", but transaction '%s' was found", config.familyName, tx.getConfiguration.getFamilyName))
+                return block(null)
+            case PropagationLevel.Requires =>
+                if (tx eq null) {
+                    tx = txFactory.newTransaction(pool)
+                    txContainer.tx = tx
+                    try {
+                        return doApply(tx, pool, block)
+                    } finally {
+                        txContainer.tx = null;
+                        pool.put(tx)
+                    }
+                }
+                else return block(tx)
+            case PropagationLevel.RequiresNew =>
+                val suspendedTx = tx
+                tx = txFactory.newTransaction(pool)
+                txContainer.tx = tx
+                try {
+                    return doApply(tx, pool, block)
+                } finally {
+                    txContainer.tx = suspendedTx
+                    pool.put(tx)
+                }
+            case PropagationLevel.Supports =>
+                return block(tx)
+            case _ =>
+                throw new IllegalStateException
+        }
+    }
+
+    private def doApply[@specialized E](tx: GammaTransaction, pool: GammaTransactionPool, block: (Transaction) => E): E = {
+        var myTx = tx
+        var cause: Throwable = null
+        var abort = true
+        try {
+            do {
+                try {
+                    cause = null
+                    val result = block(myTx)
+                    myTx.commit
+                    abort = false
+                    return result
+                } catch {
+                    case e: RetryError => {
+                        cause = e
+                        myTx.awaitUpdate()
+                    }
+                    case e: SpeculativeConfigurationError => {
+                        cause = e
+                        abort = false
+                        val oldTx = myTx
+                        myTx = txFactory.upgradeAfterSpeculativeFailure(myTx, pool)
+                        pool.put(oldTx)
+                    }
+                    case e: ReadWriteConflict => {
+                        cause = e
+                        backoffPolicy.delayUninterruptible(myTx.getAttempt)
+                    }
+                }
+            } while (myTx.softReset)
+        } finally {
+            if (abort) myTx.abort()
+        }
+
+        throw new TooManyRetriesException(
+            format("[%s] Maximum number of %s retries has been reached", config.getFamilyName, config.getMaxRetries), cause)
+    }
+}
+
 trait TxExecutor {
 
     def apply[@specialized E](block: (Transaction) => E): E;
@@ -700,20 +801,24 @@ trait NumberAtom[E] extends Atom[E] {
 
 trait AkkaLock {
 
+    import AkkaStm._
+
     def atomicGetLockMode(): LockMode
 
-    def getLockMode(tx: Transaction): LockMode
+    def getLockMode(implicit tx: Transaction = getThreadLocalTx): LockMode
 
-    def acquire(tx: Transaction, desiredLockMode: LockMode): Unit
+    def acquire(desiredLockMode: LockMode)(implicit tx: Transaction = getThreadLocalTx): Unit
 }
 
-class AkkaLockImpl(val lock: Lock) extends AkkaLock {
+class AkkaLockImpl(protected val lock: Lock) extends AkkaLock {
+
+    import AkkaStm._
 
     override def atomicGetLockMode() = lock.atomicGetLockMode
 
-    override def getLockMode(tx: Transaction) = lock.getLockMode(tx)
+    override def getLockMode(implicit tx: Transaction = getThreadLocalTx) = lock.getLockMode(tx)
 
-    override def acquire(tx: Transaction, desiredLockMode: LockMode) = lock.acquire(tx, desiredLockMode)
+    override def acquire(desiredLockMode: LockMode)(implicit tx: Transaction = getThreadLocalTx) = lock.acquire(tx, desiredLockMode)
 }
 
 class TxExecutorConfigurer(val builder: GammaTransactionFactoryBuilder) {
@@ -825,11 +930,11 @@ class TxExecutorConfigurer(val builder: GammaTransactionFactoryBuilder) {
     }
 
     def newTxExecutor() = {
-        if (builder.getConfiguration.propagationLevel == PropagationLevel.Requires)
-            new LeanTxExecutor(builder.newTransactionFactory)
-        else
-            throw new TodoException()
+        if (isLean) new LeanTxExecutor(builder.newTransactionFactory)
+        else new FatTxExecutor(builder.newTransactionFactory)
     }
+
+    def isLean: Boolean = builder.getConfiguration.propagationLevel == PropagationLevel.Requires
 }
 
 trait RefFactory {
@@ -860,8 +965,7 @@ object AkkaStm extends RefFactory {
         getThreadLocalTx match {
             case null => throw new TransactionRequiredException
             case tx: GammaTransaction => tx.register(new TransactionListener {
-                def notify(tx: Transaction, e: TransactionEvent) =
-                    if (e == TransactionEvent.PostCommit) f()
+                def notify(tx: Transaction, e: TransactionEvent) = if (e == TransactionEvent.PostCommit) f()
             })
         }
     }
@@ -870,8 +974,7 @@ object AkkaStm extends RefFactory {
         getThreadLocalTx match {
             case null => throw new TransactionRequiredException
             case tx: GammaTransaction => tx.register(new TransactionListener {
-                def notify(tx: Transaction, e: TransactionEvent) =
-                    if (e == TransactionEvent.PostCommit) f()
+                def notify(tx: Transaction, e: TransactionEvent) = if (e == TransactionEvent.PostAbort) f()
             })
         }
     }
