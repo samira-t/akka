@@ -644,11 +644,12 @@ class LeanTxExecutor(txFactory: GammaTransactionFactory) extends TxExecutor {
         }
 
         throw new TooManyRetriesException(
-            format("[%s] Maximum number of %s retries has been reached", config.getFamilyName, config.getMaxRetries), cause)
+            format("[%s] TxExecutor has reached maximum number of %s retries", config.getFamilyName, config.getMaxRetries), cause)
     }
 }
 
-class FatTxExecutor(txFactory: GammaTransactionFactory) extends TxExecutor {
+class FatTxExecutor(txConfigurer: TxExecutorConfigurer) extends TxExecutor {
+    val txFactory = txConfigurer.builder.newTransactionFactory
     val config = txFactory.getConfiguration
     val backoffPolicy = config.getBackoffPolicy
 
@@ -664,82 +665,80 @@ class FatTxExecutor(txFactory: GammaTransactionFactory) extends TxExecutor {
 
         config.propagationLevel match {
             case PropagationLevel.Mandatory =>
-                if (tx eq null)
-                    throw new TransactionMandatoryException(
-                        format("No transaction is found for atomicblock '%s' with 'Mandatory' propagation level",
-                            config.familyName))
-                return block(tx)
+                if (tx ne null) block(tx)
+                else throw new TransactionMandatoryException(
+                    format("[%s] No transaction is found for TxExecutor with 'Mandatory' propagation level",
+                        config.familyName))
             case PropagationLevel.Never =>
-                if (tx ne null)
-                    throw new TransactionNotAllowedException(
-                        format("No transaction is allowed for atomicblock '%s' with propagation level 'Never'" +
-                            ", but transaction '%s' was found", config.familyName, tx.getConfiguration.getFamilyName))
-                return block(null)
+                if (tx eq null) block(null)
+                else throw new TransactionNotAllowedException(
+                    format("[%s] No transaction is allowed for TxExecutor with propagation level 'Never'" +
+                        ", but transaction '%s' was found", config.familyName, tx.getConfiguration.getFamilyName))
             case PropagationLevel.Requires =>
-                if (tx eq null) {
+                if (tx ne null) block(tx)
+                else {
                     tx = txFactory.newTransaction(pool)
                     txContainer.tx = tx
                     try {
-                        return doApply(tx, pool, block)
+                        doApply(tx, pool, block)
                     } finally {
                         txContainer.tx = null;
                         pool.put(tx)
                     }
                 }
-                else return block(tx)
             case PropagationLevel.RequiresNew =>
                 val suspendedTx = tx
                 tx = txFactory.newTransaction(pool)
                 txContainer.tx = tx
                 try {
-                    return doApply(tx, pool, block)
+                    doApply(tx, pool, block)
                 } finally {
                     txContainer.tx = suspendedTx
                     pool.put(tx)
                 }
             case PropagationLevel.Supports =>
-                return block(tx)
+                block(tx)
             case _ =>
                 throw new IllegalStateException
         }
     }
 
-    private def doApply[@specialized E](tx: GammaTransaction, pool: GammaTransactionPool, block: (Transaction) => E): E = {
-        var myTx = tx
+    private def doApply[@specialized E](initialTx: GammaTransaction, pool: GammaTransactionPool, block: (Transaction) => E): E = {
+        var tx = initialTx
         var cause: Throwable = null
         var abort = true
         try {
             do {
                 try {
                     cause = null
-                    val result = block(myTx)
-                    myTx.commit
+                    val result = block(tx)
+                    tx.commit
                     abort = false
                     return result
                 } catch {
                     case e: RetryError => {
                         cause = e
-                        myTx.awaitUpdate()
+                        tx.awaitUpdate()
                     }
                     case e: SpeculativeConfigurationError => {
                         cause = e
                         abort = false
-                        val oldTx = myTx
-                        myTx = txFactory.upgradeAfterSpeculativeFailure(myTx, pool)
+                        val oldTx = tx
+                        tx = txFactory.upgradeAfterSpeculativeFailure(tx, pool)
                         pool.put(oldTx)
                     }
                     case e: ReadWriteConflict => {
                         cause = e
-                        backoffPolicy.delayUninterruptible(myTx.getAttempt)
+                        backoffPolicy.delayUninterruptible(tx.getAttempt)
                     }
                 }
-            } while (myTx.softReset)
+            } while (tx.softReset)
         } finally {
-            if (abort) myTx.abort()
+            if (abort) tx.abort()
         }
 
         throw new TooManyRetriesException(
-            format("[%s] Maximum number of %s retries has been reached", config.getFamilyName, config.getMaxRetries), cause)
+            format("[%s] TxExecutor has reached maximum number of %s retries", config.getFamilyName, config.getMaxRetries), cause)
     }
 }
 
@@ -926,15 +925,15 @@ class TxExecutorConfigurer(val builder: GammaTransactionFactoryBuilder) {
                 }
             }
         }
-        new TxExecutorConfigurer(builder.addPermanentListener(listener))
+        new TxExecutorConfigurer(builder.addPermanentListener(listener).setSpeculative(false))
     }
 
     def newTxExecutor() = {
         if (isLean) new LeanTxExecutor(builder.newTransactionFactory)
-        else new FatTxExecutor(builder.newTransactionFactory)
+        else new FatTxExecutor(this)
     }
 
-    def isLean: Boolean = builder.getConfiguration.propagationLevel == PropagationLevel.Requires
+    def isLean: Boolean = (builder.getConfiguration.propagationLevel eq PropagationLevel.Requires) || (builder.getConfiguration.traceLevel == TraceLevel.None)
 }
 
 trait RefFactory {

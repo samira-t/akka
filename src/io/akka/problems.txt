@@ -9,9 +9,9 @@ INTEGRATION PROBLEMS.
 
 TODO:
 
-- fat atomic block for propagation support
-
 DONE
+
+- fat atomic block for propagation support
 
 - implicit transactions
 
