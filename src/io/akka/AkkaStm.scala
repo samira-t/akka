@@ -10,6 +10,9 @@ import java.util.concurrent.TimeUnit
 import org.multiverse.stms.gamma.{GammaStmUtils, GammaStm}
 import org.multiverse.MultiverseConstants
 
+/**
+ *
+ */
 final class Ref[E] {
 
     import AkkaStm._
@@ -741,11 +744,43 @@ class FatTxExecutor(txConfigurer: TxExecutorConfigurer) extends TxExecutor {
     }
 }
 
+/**
+ * The TxExecutor is responsible for executing transactional blocks using some transaction. It is responsible
+ * for the ACI behavior of the STM and will automatically retry a transaction when it runs into problems like
+ * a readwrite conflict. This will repeat until the operation completes successfully, throws a Throwable or
+ * till the maximum number of retries has been reached.
+ *
+ * TxExecutors are 'expensive' to create, so therefor should be reused. It is best to create the TxExecutors in
+ * the beginning and store them in a static field (they are threadsafe) and reuse them for all transactions for
+ * a specific operation.
+ *
+ * The underlying STM implementation: Multiverse, uses a speculative mechanism (if enabled) where transactions
+ * learn based on previous executions so to select the best performing/scalable settings (not all settings can
+ * be inferred, but quite a lot internal settings can). This can lead to some unexpected transaction failures
+ * in the beginning when the {@link SpeculativeConfigurationError} is thrown, but this is caught by the TxExecutor
+ * and the transaction is retried. Once the TxExecutor had learned, it will not make the same mistake again.
+ * This is another reason to reuse the TxExecutor since else this knowledge would be lost every time a new transaction
+ * using a new TxExecutor is executed.
+ *
+ * Transactions are pooled to improve performance, so references to transactions should not be maintained. The same
+ * transaction instance could be reused for completely unrelated transactional operations.
+ *
+ * In Multiverse the TxExecutor is called the AtomicBlock, so see that for more details.
+ * todo: link to Multiverse documentation.
+ */
 trait TxExecutor {
 
     def apply[@specialized E](block: (Transaction) => E): E;
 }
 
+/**
+ * A view on a Ref is the set of operations where each operation either executed on an existing transaction,
+ * and if one is missing the operation is executed atomically. So operations are safe to call within a transaction,
+ * but also if one is missing.
+ *
+ * The difference between a {@link View} and an {@link Atom} is that a view is able to lift on an existing transaction
+ * if one is available, and an Atom will never lift on an existing transaction.
+ */
 trait View[E] {
 
     def get(): E
@@ -757,6 +792,9 @@ trait View[E] {
     def alter(f: (E) => E): E
 }
 
+/**
+ * A {@link View} tailored for the Ref that stores objects instead of primitives.
+ */
 trait RefView[E] extends View[E] {
 
     def getOrElse(defaultValue: E)
@@ -766,6 +804,10 @@ trait RefView[E] extends View[E] {
     def isNull(): Boolean
 }
 
+/**
+ * An Atom of a Ref is the set of operations where each operation is executed atomically no matter if currently
+ * a transaction is running.
+ */
 trait Atom[E] {
 
     def get(): E
@@ -781,6 +823,9 @@ trait Atom[E] {
     def compareAndSet(expectedValue: E, newValue: E): Boolean
 }
 
+/**
+ * An {@link Atom} tailored for a {@link Ref} that is able to store object references.
+ */
 trait RefAtom[E] extends Atom[E] {
 
     def getOrElse(defaultValue: E)
@@ -790,6 +835,9 @@ trait RefAtom[E] extends Atom[E] {
     def isNull(): Boolean
 }
 
+/**
+ * An {@link Atom} tailored for storing primitive numbers.
+ */
 trait NumberAtom[E] extends Atom[E] {
 
     def atomicInc(amount: E): E
@@ -797,6 +845,9 @@ trait NumberAtom[E] extends Atom[E] {
     def atomicDec(amount: E): E
 }
 
+/**
+ * The AkkaLock provides access to the pessimistic behavior of the Ref.
+ */
 trait AkkaLock {
 
     import AkkaStm._
