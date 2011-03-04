@@ -1,4 +1,4 @@
-package io.akka
+package akka.stm
 
 import org.multiverse.api.Transaction
 

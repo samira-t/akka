@@ -1,4 +1,4 @@
-package io.akka
+package akka.stm
 
 import org.multiverse.api._
 import exceptions._
@@ -747,8 +747,10 @@ class FatTxExecutor(txConfigurer: TxExecutorConfigurer) extends TxExecutor {
 /**
  * The TxExecutor is responsible for executing transactional blocks using some transaction. It is responsible
  * for the ACI behavior of the STM and will automatically retry a transaction when it runs into problems like
- * a readwrite conflict. This will repeat until the operation completes successfully, throws a Throwable or
- * till the maximum number of retries has been reached.
+ * a read/write conflict. This will repeat until the operation completes successfully, throws a Throwable or
+ * till the maximum number of retries has been reached. The underlying STM implementation makes use of
+ * {@link ControlFlowError} to regulate control flow. It is very important that these errors are not caught
+ * unless you really know what you are doing.
  *
  * TxExecutors are 'expensive' to create, so therefor should be reused. It is best to create the TxExecutors in
  * the beginning and store them in a static field (they are threadsafe) and reuse them for all transactions for
@@ -757,9 +759,9 @@ class FatTxExecutor(txConfigurer: TxExecutorConfigurer) extends TxExecutor {
  * The underlying STM implementation: Multiverse, uses a speculative mechanism (if enabled) where transactions
  * learn based on previous executions so to select the best performing/scalable settings (not all settings can
  * be inferred, but quite a lot internal settings can). This can lead to some unexpected transaction failures
- * in the beginning when the {@link SpeculativeConfigurationError} is thrown, but this is caught by the TxExecutor
+ * in the beginning because a {@link SpeculativeConfigurationError} is thrown. This error this is caught by the TxExecutor
  * and the transaction is retried. Once the TxExecutor had learned, it will not make the same mistake again.
- * This is another reason to reuse the TxExecutor since else this knowledge would be lost every time a new transaction
+ * This is another reason to reuse the TxExecutor, since else this knowledge would be lost every time a transaction
  * using a new TxExecutor is executed.
  *
  * Transactions are pooled to improve performance, so references to transactions should not be maintained. The same
@@ -871,27 +873,86 @@ class AkkaLockImpl(protected val lock: Lock) extends AkkaLock {
 }
 
 class TxExecutorConfigurer(val builder: GammaTransactionFactoryBuilder) {
-
+    /**
+     * Sets if the {@link org.multiverse.api.exceptions.ControlFlowError} is reused. Normally you don't want to reuse them
+     * because they can be expensive to create (especially the stacktrace) and they could be created very often. But for
+     * debugging purposes it can be quite annoying because you want to see the stacktrace.
+     *
+     * @param reused true if ControlFlowErrors should be reused.
+     * @return the updated TransactionFactoryBuilder.
+     * @see TxExecutorConfigurer#isControlFlowErrorsReused()
+     */
     def withControlFlowErrorsReused(reused: Boolean) = {
         if (builder.getConfiguration.isControlFlowErrorsReused) this
         else new TxExecutorConfigurer(builder.setControlFlowErrorsReused(reused))
     }
 
+    /**
+     * Sets the {@link Transaction} familyname. If an {@link AtomicBlock} is used inside a method, a useful familyname could
+     * be the full name of the class and the method.
+     * <p/>
+     * The transaction familyName is useful debugging purposes, but has not other meaning.
+     *
+     * @param familyName the familyName of the transaction.
+     * @return the updated TransactionFactoryBuilder
+     * @throws NullPointerException if familyName is null.
+     * @see TransactionConfiguration#getFamilyName()
+     */
     def withFamilyName(familyName: String) = {
         if (familyName eq builder.getConfiguration.getFamilyName) this
         else new TxExecutorConfigurer(builder.setFamilyName(familyName))
     }
 
-    def withPropagationLevel(propagationLevel: PropagationLevel) = {
+    /**
+     * Sets the {@link org.multiverse.api.PropagationLevel} used. With the PropagationLevel you have control
+     * on how the transaction deals with transaction nesting. The default is {@link PropagationLevel#Requires}
+     * which automatically starts a transaction is one is missing, or lifts on a transaction if available.
+     *
+     * @param propagationLevel the new PropagationLevel
+     * @return the updated TransactionFactoryBuilder
+     * @throws NullPointerException if propagationLevel is null.
+     * @see TransactionConfiguration#getPropagationLevel()
+     * @see PropagationLevel
+     */
+   def withPropagationLevel(propagationLevel: PropagationLevel) = {
         if (propagationLevel eq builder.getConfiguration.getPropagationLevel) this
         else new TxExecutorConfigurer(builder.setPropagationLevel(propagationLevel))
     }
 
+    /**
+     * Sets the {@link Transaction} {@link LockMode} for all reads. If a LockMode is set higher than {@link LockMode#None}, this transaction
+     * will locks all reads (and writes since a read is needed for a write) and the transaction automatically becomes
+     * serialized.
+     *
+     * @param lockMode the LockMode to set.
+     * @return the updated TransactionFactoryBuilder.
+     * @throws NullPointerException if lockMode is null.
+     * @see TransactionConfiguration#getReadLockMode()
+     * @see LockMode
+     */
     def withReadLockMode(lockMode: LockMode) = {
         if (lockMode eq builder.getConfiguration.getReadLockMode) this
         else new TxExecutorConfigurer(builder.setReadLockMode(lockMode))
     }
 
+    /**
+     * Sets the {@link Transaction{} {@link LockMode} for all writes. For a write, always a read needs to be done, so if the read LockMode is
+     *
+     * <p>Freshly constructed objects that are not committed, automatically are locked with {@link LockMode#Exclusive}.
+     *
+     * <p>If the write LockMode is set after the read LockMode and the write LockMode is lower than the read LockMode,
+     * an {@code IllegalTransactionFactoryException} will be thrown when a {@link TransactionFactory} is created.
+     *
+     * <p>If the write LockMode is set before the read LockMode and the write LockMode is lower than the read LockMode,
+     * the write LockMode automatically is upgraded to that of the read LockMode. This makes setting the readLock
+     * mode less of a nuisance.
+     *
+     * @param lockMode the LockMode to set.
+     * @return the updated TransactionFactoryBuilder.
+     * @throws NullPointerException if lockMode is null.
+     * @see TransactionConfiguration#getWriteLockMode()
+     * @see LockMode
+     */
     def withWriteLockMode(lockMode: LockMode) = {
         if (lockMode eq builder.getConfiguration.getWriteLockMode) this
         else new TxExecutorConfigurer(builder.setWriteLockMode(lockMode))
@@ -900,82 +961,190 @@ class TxExecutorConfigurer(val builder: GammaTransactionFactoryBuilder) {
     def withPermanentListener(listener: TransactionListener) =
         new TxExecutorConfigurer(builder.addPermanentListener(listener))
 
+    /**
+     * Sets the {@link Transaction} {@link TraceLevel}. With tracing it is possible to see what is happening inside a transaction.
+     *
+     * @param traceLevel the new traceLevel.
+     * @return the updated TransactionFactoryBuilder.
+     * @throws NullPointerException if traceLevel is null.
+     * @see TransactionConfiguration#getTraceLevel()
+     * @see TraceLevel
+     */
     def withTraceLevel(traceLevel: TraceLevel) = {
         if (traceLevel eq builder.getConfiguration.traceLevel) this
         else new TxExecutorConfigurer(builder.setTraceLevel(traceLevel))
     }
 
+    /**
+     * Sets the timeout (the maximum time a {@link Transaction} is allowed to block. Long.MAX_VALUE indicates that an
+     * unbound timeout should be used (so no timeout).
+     *
+     * @param timeoutNs the timeout specified in nano seconds
+     * @return the updated TransactionFactoryBuilder
+     * @see TransactionConfiguration#getTimeoutNs()
+     * @see Transaction#getRemainingTimeoutNs()
+     */
     def withRetryTimeoutNs(timeout: Long, unit: TimeUnit = TimeUnit.SECONDS) = {
         val timeoutNs = unit.toNanos(timeout)
         if (timeoutNs == builder.getConfiguration.getTimeoutNs) this
         else new TxExecutorConfigurer(builder.setTimeoutNs(timeoutNs))
     }
 
-    def withInterruptible(interruptible: Boolean) = {
+    /**
+     * Sets if the {@link Transaction} can be interrupted while doing blocking operations.
+     *
+     * @param interruptible if the transaction can be interrupted while doing blocking operations.
+     * @return the updated TransactionFactoryBuilder
+     * @see TransactionConfiguration#isInterruptible()
+     */
+   def withInterruptible(interruptible: Boolean) = {
         if (interruptible == builder.getConfiguration.isInterruptible) this
         else new TxExecutorConfigurer(builder.setInterruptible(interruptible))
     }
 
-    def withBackoffPolicy(backoffPolicy: BackoffPolicy) = {
+    /**
+     * Sets the {@link Transaction} {@link BackoffPolicy}. Policy is used to backoff when a transaction conflicts with another
+     * {@link Transaction}. See the {@link BackoffPolicy} for more information.
+     *
+     * @param backoffPolicy the backoff policy to use.
+     * @return the updated TransactionFactoryBuilder
+     * @throws NullPointerException if backoffPolicy is null.
+     * @see TransactionConfiguration#getBackoffPolicy()
+     */
+   def withBackoffPolicy(backoffPolicy: BackoffPolicy) = {
         if (backoffPolicy eq builder.getConfiguration.getBackoffPolicy) this
         else new TxExecutorConfigurer(builder.setBackoffPolicy(backoffPolicy))
     }
 
+    /**
+     * Sets if the {@link Transaction} dirty check is enabled. Dirty check is that something only needs to be written,
+     * if there really is a change (else it will be interpreted as a read). If it is disabled, it will always write, and
+     * this could prevent the aba isolation anomaly, but causes more conflicts so more contention. In most cases enabling
+     * it is the best option.
+     *
+     * @param dirtyCheckEnabled true if dirty check should be executed, false otherwise.
+     * @return the updated TransactionFactoryBuilder.
+     * @see TransactionConfiguration#isDirtyCheckEnabled()
+     */
     def withDirtyCheck(dirtyCheckEnabled: Boolean) = {
         if (dirtyCheckEnabled == builder.getConfiguration.isDirtyCheckEnabled) this
         else new TxExecutorConfigurer(builder.setDirtyCheckEnabled(dirtyCheckEnabled))
     }
 
+    /**
+     * Sets the maximum number of spins that are allowed when a {@link Transaction} can't be read/written/locked
+     * because it is locked by another transaction.
+     *
+     * <p>Setting the value to a very high value, could lead to more an increased chance of a live locking.
+     *
+     * @param spinCount the maximum number of spins
+     * @return the updated TransactionFactoryBuilder.
+     * @throws IllegalArgumentException if spinCount smaller than 0.
+     * @see TransactionConfiguration#getSpinCount()
+     */
     def withSpinCount(spinCount: Int) = {
         if (spinCount == builder.getConfiguration.getSpinCount) this
         else new TxExecutorConfigurer(builder.setSpinCount(spinCount))
     }
 
-    def withReadonly(readonly: Boolean) = {
+    /**
+     * Sets the readonly property on a {@link Transaction}. If a transaction is configured as readonly, no write operations
+     * (also no construction of new transactional objects making use of that transaction) is allowed
+     *
+     * @param readonly true if the transaction should be readonly, false otherwise.
+     * @return the updated TransactionFactoryBuilder
+     * @see TransactionConfiguration#isReadonly()
+     */
+     def withReadonly(readonly: Boolean) = {
         if (readonly == builder.getConfiguration.isReadonly) this
         else new TxExecutorConfigurer(builder.setReadonly(readonly))
     }
 
+    /**
+     * Sets if the {@link Transaction} should automatically track all reads that have been done. This is needed for blocking
+     * operations, but also for other features like writeskew detection.
+     *
+     * <p>Tracking reads puts more pressure on the transaction since it needs to store all reads, but it reduces the chance
+     * of read conflicts, since once read from main memory, it can be retrieved from the transaction.
+     *
+     * The transaction is free to track reads even though this property is disabled.
+     *
+     * @param enabled true if read tracking enabled, false otherwise.
+     * @return the updated TransactionFactoryBuilder
+     * @see TransactionConfiguration#isReadTrackingEnabled()
+     */
     def withReadTrackingEnabled(enabled: Boolean) = {
         if (enabled == builder.getConfiguration.isReadTrackingEnabled) this
         else new TxExecutorConfigurer(builder.setReadTrackingEnabled(enabled))
     }
 
+    /**
+     * With the speculative configuration enabled, the {@link Stm} is allowed to determine optimal settings for
+     * a {@link Transaction}.
+     *
+     * <p>Some behavior like readonly or the need for tracking reads can be determined runtime. The system can start with
+     * a readonly non readtracking transaction and upgrade to an update or a read tracking once a write or retry
+     * happens.
+     *
+     * <p>It depends on the {@link Stm} implementation on which properties it is going to speculate.
+     *
+     * <p>Enabling it can cause a few unexpected 'retries' of transactions, but it can seriously improve performance.
+     *
+     * @param speculative indicates if speculative configuration should be enabled.
+     * @return the updated TransactionFactoryBuilder
+     * @see TransactionConfiguration#isSpeculative()
+     */
     def withSpeculation(speculative: Boolean) = {
         if (speculative == builder.getConfiguration.isSpeculative) this
         else new TxExecutorConfigurer(builder.setSpeculative(speculative))
     }
 
+    /**
+     * Sets the the maximum count a {@link Transaction} can be retried. The default is 1000. Setting it to a very low value
+     * could mean that a transaction can't complete. Setting it to a very high value could lead to live-locking.
+     *
+     * <p>If the speculative configuration mechanism is enabled ({@link #setSpeculative(boolean)}), a few retries
+     * are done in the beginning to figure out the best settings.
+     *
+     * @param maxRetries the maximum number of times a transaction can be tried.
+     * @return the updated TransactionFactoryBuilder
+     * @throws IllegalArgumentException if maxRetries smaller than 0.
+     * @see TransactionConfiguration#getMaxRetries()
+     */
     def withMaxRetries(maxRetries: Int) = {
         if (maxRetries == builder.getConfiguration.getMaxRetries) this
         else new TxExecutorConfigurer(builder.setMaxRetries(maxRetries))
     }
 
+    /**
+     * Sets the {@link IsolationLevel} on the {@link Transaction}.
+     *
+     * <p>The {@link Transaction} is free to upgraded to a higher {@link IsolationLevel}. This is essentially the same
+     * behavior you get when Oracle is used, where a read uncommitted is upgraded to a read committed and a repeatable
+     * read is upgraded to the Oracle version of serialized (so with the writeskew problem still there).
+     *
+     * @param isolationLevel the new IsolationLevel
+     * @return the updated TransactionFactoryBuilder
+     * @throws NullPointerException if isolationLevel is null.
+     * @see TransactionConfiguration#getIsolationLevel()
+     * @see IsolationLevel
+     */
     def withIsolationLevel(isolationLevel: IsolationLevel) = {
         if (isolationLevel eq builder.getConfiguration.getIsolationLevel) this
         else new TxExecutorConfigurer(builder.setIsolationLevel(isolationLevel))
     }
 
+    /**
+     * Sets if the {@link Transaction} is allowed to do an explicit retry (needed for a blocking operation). One use case
+     * for disallowing it, it when the transaction is used inside an actor, and you don't want that inside the logic
+     * executed by the agent a blocking operations is done (e.g. taking an item of a blocking queue).
+     *
+     * @param blockingAllowed true if explicit retry is allowed, false otherwise.
+     * @return the updated TransactionFactoryBuilder
+     */
     def withBlockingAllowed(blockingAllowed: Boolean) = {
         if (blockingAllowed == builder.getConfiguration.isBlockingAllowed) this
         else new TxExecutorConfigurer(builder.setBlockingAllowed(blockingAllowed))
-    }
-
-    def withJtaEnabled() = {
-        //just an example how the permanent listeners can be added to add your own logic that will always be executed.
-        //no need to register the individual listeners anymore (also makes it faster).
-        val listener = new TransactionListener() {
-            def notify(tx: Transaction, e: TransactionEvent) = {
-                e match {
-                    case TransactionEvent.PreStart => println("prestart")
-                    case TransactionEvent.PostStart => println("poststart")
-                    case TransactionEvent.PrePrepare => println("preprepare")
-                    case TransactionEvent.PostAbort => println("postabort")
-                    case TransactionEvent.PostCommit => println("postcommit")
-                }
-            }
-        }
-        new TxExecutorConfigurer(builder.addPermanentListener(listener).setSpeculative(false))
     }
 
     def newTxExecutor() = {
@@ -986,16 +1155,34 @@ class TxExecutorConfigurer(val builder: GammaTransactionFactoryBuilder) {
     def isLean: Boolean = (builder.getConfiguration.propagationLevel eq PropagationLevel.Requires) || (builder.getConfiguration.traceLevel eq TraceLevel.None)
 }
 
+/**
+ * A factory responsible for creating transactional references.
+ */
 trait RefFactory {
 
+    /**
+     * Creates a committed {@link IntRef}.
+     */
     def newIntRef(value: Int = 0)
 
+    /**
+     * Creates a committed {@link LongRef}.
+     */
     def newLongRef(value: Long = 0)
 
+    /**
+     * Creates a committed {@link BooleanRef}.
+     */
     def newBooleanRef(value: Boolean = false)
 
+    /**
+     * Creates a committed {@link DoubleRef}.
+     */
     def newDoubleRef(value: Double = 0)
 
+    /**
+     * Creates a committed {@link Ref}.
+     */
     def newRef[E](): Ref[E]
 }
 
