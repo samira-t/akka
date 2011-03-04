@@ -6,7 +6,6 @@ import functions.LongFunction
 import lifecycle.{TransactionEvent, TransactionListener}
 import org.multiverse.stms.gamma.transactions.{GammaTransactionFactoryBuilder, GammaTransactionFactory, GammaTransaction, GammaTransactionPool}
 import org.multiverse.stms.gamma.transactionalobjects._
-import javax.transaction.TransactionRequiredException
 import java.util.concurrent.TimeUnit
 import org.multiverse.stms.gamma.{GammaStmUtils, GammaStm}
 import org.multiverse.MultiverseConstants
@@ -24,9 +23,9 @@ final class Ref[E] {
             if (tx eq null) ref.atomicGet() else ref.get(tx)
         }
 
-        override def getOrElse(defaultValue: E) = {
-            val result = get()
-            if (result == null) defaultValue else result
+        override def getOrElse(f: => E) = {
+            val result = ref.get
+            if (result == null) f else result
         }
 
         override def opt() = Option(get)
@@ -57,9 +56,9 @@ final class Ref[E] {
 
         override def get = ref.atomicGet
 
-        override def getOrElse(defaultValue: E) = {
+        override def getOrElse(f: => E) = {
             val result = ref.atomicGet
-            if (result == null) defaultValue else result
+            if (result == null) f else result
         }
 
         override def weakGet: E = ref.atomicWeakGet
@@ -933,7 +932,7 @@ class TxExecutorConfigurer(val builder: GammaTransactionFactoryBuilder) {
         else new FatTxExecutor(this)
     }
 
-    def isLean: Boolean = (builder.getConfiguration.propagationLevel eq PropagationLevel.Requires) || (builder.getConfiguration.traceLevel == TraceLevel.None)
+    def isLean: Boolean = (builder.getConfiguration.propagationLevel eq PropagationLevel.Requires) || (builder.getConfiguration.traceLevel eq TraceLevel.None)
 }
 
 trait RefFactory {
@@ -962,18 +961,18 @@ object AkkaStm extends RefFactory {
     //now the f is wrapped
     def deferred(f: Unit => Unit): Unit = {
         getThreadLocalTx match {
-            case null => throw new TransactionRequiredException
+            case null => throw new TransactionMandatoryException
             case tx: GammaTransaction => tx.register(new TransactionListener {
-                def notify(tx: Transaction, e: TransactionEvent) = if (e == TransactionEvent.PostCommit) f()
+                def notify(tx: Transaction, e: TransactionEvent) = if (e == TransactionEvent.PostCommit) f
             })
         }
     }
 
     def compensating(f: Unit => Unit): Unit = {
         getThreadLocalTx match {
-            case null => throw new TransactionRequiredException
+            case null => throw new TransactionMandatoryException
             case tx: GammaTransaction => tx.register(new TransactionListener {
-                def notify(tx: Transaction, e: TransactionEvent) = if (e == TransactionEvent.PostAbort) f()
+                def notify(tx: Transaction, e: TransactionEvent) = if (e == TransactionEvent.PostAbort) f
             })
         }
     }

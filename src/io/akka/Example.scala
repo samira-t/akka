@@ -24,8 +24,9 @@ object Example {
     def test1() = {
         val ref = new Ref[String]
         apply((tx: Transaction) =>
+            //ref.value = ref.value + "foo"
             ref.set(ref.get() + "foo")
-        //    ref.value = ref.value + "foo"
+
         )
         println(ref.atom.get())
     }
