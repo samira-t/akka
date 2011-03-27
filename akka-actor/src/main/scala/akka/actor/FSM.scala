@@ -400,11 +400,21 @@ trait FSM[S, D] extends DelayedInit {
     self.stop
   }
 
+  /**
+   * Event class, encapsulating the current message and the state data.
+   */
   case class Event[D](event: Any, stateData: D)
+
+  /**
+   * Convenience extractor for <code>Event</code> when the state data are not relevant.
+   */
   object Ev {
     def unapply[D](e : Event[D]) : Option[Any] = Some(e.event)
   }
 
+  /**
+   * Class describing the next state transition, to be returned by each state function.
+   */
   case class State(stateName: S, stateData: D, timeout: Timeout = None) {
 
     /**
