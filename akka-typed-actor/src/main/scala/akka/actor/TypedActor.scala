@@ -954,16 +954,16 @@ private[akka] abstract class ActorAspect {
       actorRef.!(joinPoint)(senderActorRef)
       null.asInstanceOf[AnyRef]
     } else if (TypedActor.returnsFuture_?(methodRtti)) {
-      actorRef.!!!(joinPoint, timeout)(senderActorRef)
+      actorRef.!!!(joinPoint)(Actor.Timeout(timeout), senderActorRef)
     } else if (TypedActor.returnsOption_?(methodRtti)) {
         import akka.japi.{Option => JOption}
-      (actorRef.!!(joinPoint, timeout)(senderActorRef)).as[JOption[AnyRef]] match {
+      (actorRef.!!(joinPoint)(Actor.Timeout(timeout), senderActorRef)).as[JOption[AnyRef]] match {
         case None => JOption.none[AnyRef]
         case Some(x) if ((x eq null) || x.isEmpty) => JOption.some[AnyRef](null)
         case Some(x) => x
       }
     } else {
-      val result = (actorRef.!!(joinPoint, timeout)(senderActorRef)).as[AnyRef]
+      val result = (actorRef.!!(joinPoint)(Actor.Timeout(timeout), senderActorRef)).as[AnyRef]
       if (result.isDefined) result.get
       else throw new ActorTimeoutException("Invocation to [" + joinPoint + "] timed out.")
     }

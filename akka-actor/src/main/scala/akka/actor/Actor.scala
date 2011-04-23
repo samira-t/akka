@@ -15,6 +15,8 @@ import akka.util. {ReflectiveAccess, Duration}
 import akka.remoteinterface.RemoteSupport
 import akka.japi. {Creator, Procedure}
 
+import java.util.concurrent.TimeUnit.MILLISECONDS
+
 /**
  * Life-cycle messages for the Actors
  */
@@ -123,6 +125,9 @@ object Actor extends ListenerManagement {
     def length = d.length
     def unit = d.unit
     def toMillis = d.toMillis
+  }
+  object Timeout {
+    def apply(timeout : Long): Timeout = Timeout(Duration(timeout, MILLISECONDS))
   }
   val DefaultTimeout = Timeout(Duration(config.getInt("akka.actor.timeout", 5), TIME_UNIT))
   private[akka] val TIMEOUT = DefaultTimeout.toMillis
