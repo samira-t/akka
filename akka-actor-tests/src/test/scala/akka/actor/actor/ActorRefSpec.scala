@@ -173,5 +173,16 @@ class ActorRefSpec extends WordSpec with MustMatchers {
       boss ! "sendKill"
       latch.await(5, TimeUnit.SECONDS) must be === true
     }
+
+    "support implicit timeout argument on !!" in {
+      val worker = Actor.actorOf[WorkerActor].start()
+      val res = worker !! "work"
+      res must be (Some("workDone"))
+
+      val worker2 = Actor.actorOf[WorkerActor].start()
+      implicit val timeout = Actor.Timeout(10 millis)
+      val res2 = worker2 !! "work"
+      res2 must be (None)
+    }
   }
 }

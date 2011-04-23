@@ -317,7 +317,7 @@ trait ActorRef extends ActorRefShared with java.lang.Comparable[ActorRef] { scal
    * to send a reply message to the original sender. If not then the sender will block until the timeout expires.
    */
   def sendRequestReply(message: AnyRef, timeout: Long, sender: ActorRef): AnyRef = {
-    !!(message, timeout)(Option(sender)).getOrElse(throw new ActorTimeoutException(
+    !!(message, timeout).getOrElse(throw new ActorTimeoutException(
       "Message [" + message +
       "]\n\tsent to [" + actorClassName +
       "]\n\tfrom [" + (if (sender ne null) sender.actorClassName else "nowhere") +
@@ -351,7 +351,7 @@ trait ActorRef extends ActorRefShared with java.lang.Comparable[ActorRef] { scal
    * If you are sending messages using <code>sendRequestReplyFuture</code> then you <b>have to</b> use <code>getContext().reply(..)</code>
    * to send a reply message to the original sender. If not then the sender will block until the timeout expires.
    */
-  def sendRequestReplyFuture[T <: AnyRef](message: AnyRef, timeout: Long, sender: ActorRef): Future[T] = !!!(message, timeout)(Option(sender)).asInstanceOf[Future[T]]
+  def sendRequestReplyFuture[T <: AnyRef](message: AnyRef, timeout: Long, sender: ActorRef): Future[T] = !!!(message, timeout).asInstanceOf[Future[T]]
 
   /**
    * Akka Java API. <p/>
@@ -1323,9 +1323,9 @@ trait ScalaActorRef extends ActorRefShared { ref: ActorRef =>
    * If you are sending messages using <code>!!</code> then you <b>have to</b> use <code>self.reply(..)</code>
    * to send a reply message to the original sender. If not then the sender will block until the timeout expires.
    */
-  def !!(message: Any, timeout: Long = this.timeout)(implicit sender: Option[ActorRef] = None): Option[Any] = {
+  def !!(message: Any, timeout: Long): Option[Any] = {
     if (isRunning) {
-      val future = postMessageToMailboxAndCreateFutureResultWithTimeout[Any](message, timeout, sender, None)
+      val future = postMessageToMailboxAndCreateFutureResultWithTimeout[Any](message, timeout, None, None)
       val isMessageJoinPoint = if (isTypedActorEnabled) TypedActorModule.resolveFutureIfMessageIsJoinPoint(message, future)
       else false
       try {
@@ -1343,6 +1343,21 @@ trait ScalaActorRef extends ActorRefShared { ref: ActorRef =>
   }
 
   /**
+   * Sends a message asynchronously and waits on a future for a reply message.
+   * <p/>
+   * It waits on the reply either until it receives it (in the form of <code>Some(replyMessage)</code>)
+   * or until the timeout expires (which will return None). E.g. send-and-receive-eventually semantics.
+   * <p/>
+   * <b>NOTE:</b>
+   * Use this method with care. In most cases it is better to use '!' together with the 'sender' member field to
+   * implement request/response message exchanges.
+   * If you are sending messages using <code>!!</code> then you <b>have to</b> use <code>self.reply(..)</code>
+   * to send a reply message to the original sender. If not then the sender will block until the timeout expires.
+   */
+  def !!(message: Any)(implicit timeout: Actor.Timeout = Actor.DefaultTimeout, sender: Option[ActorRef] = None): Option[Any] =
+    !!(message, timeout.toMillis)
+
+  /**
    * Sends a message asynchronously returns a future holding the eventual reply message.
    * <p/>
    * <b>NOTE:</b>
@@ -1351,8 +1366,23 @@ trait ScalaActorRef extends ActorRefShared { ref: ActorRef =>
    * If you are sending messages using <code>!!!</code> then you <b>have to</b> use <code>self.reply(..)</code>
    * to send a reply message to the original sender. If not then the sender will block until the timeout expires.
    */
-  def !!![T](message: Any, timeout: Long = this.timeout)(implicit sender: Option[ActorRef] = None): Future[T] = {
-    if (isRunning) postMessageToMailboxAndCreateFutureResultWithTimeout[T](message, timeout, sender, None)
+  def !!![T](message: Any, timeout: Long): Future[T] = {
+    if (isRunning) postMessageToMailboxAndCreateFutureResultWithTimeout[T](message, timeout, None, None)
+    else throw new ActorInitializationException(
+      "Actor has not been started, you need to invoke 'actor.start()' before using it")
+  }
+
+  /**
+   * Sends a message asynchronously returns a future holding the eventual reply message.
+   * <p/>
+   * <b>NOTE:</b>
+   * Use this method with care. In most cases it is better to use '!' together with the 'sender' member field to
+   * implement request/response message exchanges.
+   * If you are sending messages using <code>!!!</code> then you <b>have to</b> use <code>self.reply(..)</code>
+   * to send a reply message to the original sender. If not then the sender will block until the timeout expires.
+   */
+  def !!![T](message: Any)(implicit timeout: Actor.Timeout = Actor.DefaultTimeout): Future[T] = {
+    if (isRunning) postMessageToMailboxAndCreateFutureResultWithTimeout[T](message, timeout.toMillis, None, None)
     else throw new ActorInitializationException(
       "Actor has not been started, you need to invoke 'actor.start()' before using it")
   }

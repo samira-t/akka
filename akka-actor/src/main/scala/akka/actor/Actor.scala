@@ -116,7 +116,17 @@ object Actor extends ListenerManagement {
       .getOrElse(throw new UnsupportedOperationException("You need to have akka-remote.jar on classpath"))
   }
 
-  private[akka] val TIMEOUT = Duration(config.getInt("akka.actor.timeout", 5), TIME_UNIT).toMillis
+  /*
+   * Timeout handling
+   */
+  case class Timeout(d : Duration) {
+    def length = d.length
+    def unit = d.unit
+    def toMillis = d.toMillis
+  }
+  val DefaultTimeout = Timeout(Duration(config.getInt("akka.actor.timeout", 5), TIME_UNIT))
+  private[akka] val TIMEOUT = DefaultTimeout.toMillis
+
   private[akka] val SERIALIZE_MESSAGES = config.getBool("akka.actor.serialize-messages", false)
 
   /**
