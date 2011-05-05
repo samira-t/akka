@@ -28,7 +28,7 @@ object FSMActorSpec {
   case object Locked extends LockState
   case object Open extends LockState
 
-  class Lock(code: String, timeout: Duration) extends Actor with FSM[LockState, CodeState] {
+  class Lock(val code: String, timeout: Duration) extends Actor with FSM[LockState, CodeState] {
 
     startWith(Locked, CodeState("", code))
     

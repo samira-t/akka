@@ -80,7 +80,6 @@ object FSM {
  *         case Ev(SomeMsg) => ... // convenience when data not needed
  *     }
  *     when(Two, stateTimeout = 5 seconds) { ... }
- *     initialize
  *   }
  * </pre>
  *
@@ -137,8 +136,14 @@ object FSM {
  *   cancelTimer("tock")
  *   timerActive_? ("tock")
  * </pre>
+ *
+ * <b>Important Notice:</b> FSM makes use of the DelayedInit feature introduced
+ * with Scala2.9. This implies a restriction on inheriting from a concrete FSM:
+ * the parent constructor will be followed implicitly by a call to
+ * <code>initialize</code>, which may be too early for a composed state machine
+ * model. Either make the parent a trait, or have a look at the LateInit trait.
  */
-trait FSM[S, D] extends ListenerManagement {
+trait FSM[S, D] extends ListenerManagement with DelayedInit {
   this: Actor =>
 
   import FSM._
@@ -175,7 +180,7 @@ trait FSM[S, D] extends ListenerManagement {
   protected final def startWith(stateName: S,
                                 stateData: D,
                                 timeout: Timeout = None) = {
-    currentState = State(stateName, stateData, timeout)
+    initialState = State(stateName, stateData, timeout)
   }
 
   /**
@@ -323,7 +328,24 @@ trait FSM[S, D] extends ListenerManagement {
    * last call within the constructor.
    */
   def initialize {
-    makeTransition(currentState)
+    if (currentState eq null) {
+      if (initialState eq null) {
+        sys.error("missing startWith statement in FSM definition")
+      }
+      currentState = initialState
+      makeTransition(currentState)
+    }
+  }
+
+  /**
+   * DelayedInit handling: this is used to ensure that "initialize" is called
+   * after setup in order to start initial state timeout, verify initial state
+   * existence, and so on. For a variant which defers initialization until
+   * start() time see LateInit.
+   */
+  override def delayedInit(body : => Unit) {
+    body
+    initialize
   }
 
   /******************************************************************
@@ -333,6 +355,7 @@ trait FSM[S, D] extends ListenerManagement {
   /*
    * FSM State data and current timeout handling
    */
+  private var initialState: State = _
   private var currentState: State = _
   private var timeoutFuture: Option[ScheduledFuture[AnyRef]] = None
   private var generation: Long = 0L
@@ -466,11 +489,21 @@ trait FSM[S, D] extends ListenerManagement {
     self.stop()
   }
 
+  /**
+   * Event class, encapsulating the current message and the state data.
+   */
   case class Event[D](event: Any, stateData: D)
+
+  /**
+   * Convenience extractor for <code>Event</code> when the state data are not relevant.
+   */
   object Ev {
     def unapply[D](e : Event[D]) : Option[Any] = Some(e.event)
   }
 
+  /**
+   * Class describing the next state transition, to be returned by each state function.
+   */
   case class State(stateName: S, stateData: D, timeout: Timeout = None) {
 
     /**

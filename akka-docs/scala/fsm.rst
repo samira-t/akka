@@ -76,8 +76,6 @@ Now lets create an object representing the FSM and defining the behavior.
         EventHandler.info(this, "Stopping")
         stop
     }
-
-    initialize // this checks validity of the initial state and sets up timeout if needed
   }
 
 Each state is described by one or more :func:`when(state)` blocks; if more than
@@ -91,9 +89,7 @@ needed or :func:`goto(target)` for changing into the target state. The
 transition may be annotated with additional properties, where this example
 includes a state timeout of 5 seconds after the transition into state B:
 :func:`forMax(duration)` arranges for a :obj:`StateTimeout` message to be
-scheduled, unless some other message is received first. The construction of the
-FSM is finished by calling the :func:`initialize` method as last part of the
-ABC constructor.
+scheduled, unless some other message is received first.
 
 State Data
 ==========
@@ -144,8 +140,6 @@ Now we can create a lock FSM that takes :class:`LockState` as a state and a
         goto(Locked)
       }
     }
-
-    initialize
   }
 
 This very simple example shows how the complete state of the FSM is encoded in
