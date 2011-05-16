@@ -19,6 +19,8 @@ class AkkaParentProject(info: ProjectInfo) extends ParentProject(info) with Exec
   val scalaCompileSettings =
     Seq("-deprecation",
         //"-Xmigration",
+   // "-verbose",
+   // "-Ydebug",
         "-optimise",
         "-encoding", "utf8")
 

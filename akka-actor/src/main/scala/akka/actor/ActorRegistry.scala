@@ -36,7 +36,7 @@ case class ActorUnregistered(actor: ActorRef) extends ActorRegistryEvent
  * @author <a href="http://jonasboner.com">Jonas Bon&#233;r</a>
  */
 
-final class ActorRegistry private[actor] () extends ListenerManagement {
+class ActorRegistry private[actor] () extends ListenerManagement {
 
   private val actorsByUUID    = new ConcurrentHashMap[Uuid, ActorRef]
   private val actorsById      = new Index[String,ActorRef]
@@ -55,7 +55,7 @@ final class ActorRegistry private[actor] () extends ListenerManagement {
   /**
    * Invokes a function for all actors.
    */
-  def foreach(f: (ActorRef) => Unit) = {
+  def foreach(f: ActorRef => Unit) {
     val elements = actorsByUUID.elements
     while (elements.hasMoreElements) f(elements.nextElement)
   }

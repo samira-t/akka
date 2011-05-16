@@ -2,16 +2,16 @@ package akka.actor
 
 import org.scalatest.junit.JUnitSuite
 import org.junit.Test
-import Actor._
-import java.util.concurrent.{CyclicBarrier, TimeUnit, CountDownLatch}
+import akka.actor.Actor._
+import java.util.concurrent.{ConcurrentLinkedQueue, CyclicBarrier, TimeUnit, CountDownLatch}
+import akka.dispatch.Future
 
 object ActorRegistrySpec {
-  var record = ""
+
   class TestActor extends Actor {
     self.id = "MyID"
     def receive = {
       case "ping" =>
-        record = "pong" + record
         self.reply("got ping")
     }
   }
@@ -20,10 +20,8 @@ object ActorRegistrySpec {
     self.id = "MyID2"
     def receive = {
       case "ping" =>
-        record = "pong" + record
         self.reply("got ping")
       case "ping2" =>
-        record = "pong" + record
         self.reply("got ping")
     }
   }
@@ -185,9 +183,22 @@ class ActorRegistrySpec extends JUnitSuite {
     actor1.start()
     val actor2 = actorOf[TestActor]
     actor2.start()
-    record = ""
-    Actor.registry.foreach(actor => actor !! "ping")
-    assert(record === "pongpong")
+
+    val q = new ConcurrentLinkedQueue[Future[String]]
+
+    Actor.registry.foreach {
+      actor =>
+
+      val f = actor.!!![String]("ping")
+
+      q.offer(f)
+    }
+
+    assert(q.size === 2)
+
+    scala.collection.JavaConversions.asScalaIterable(q) foreach {
+      f => assert(f.get === "got ping")
+    }
     actor1.stop()
     actor2.stop()
   }

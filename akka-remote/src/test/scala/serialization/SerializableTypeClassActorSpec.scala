@@ -247,7 +247,7 @@ class MyActorWithDualCounter extends Actor {
   }
 }
 
-class MyActor extends Actor with scala.Serializable {
+class MyActor extends Actor with java.io.Serializable {
   var count = 0
 
   def receive = {
@@ -275,7 +275,7 @@ class MyStatelessActorWithMessagesInMailbox extends Actor {
   }
 }
 
-class MyJavaSerializableActor extends Actor with scala.Serializable {
+class MyJavaSerializableActor extends Actor with java.io.Serializable {
   var count = 0
   self.receiveTimeout = Some(1000)
 

@@ -99,7 +99,7 @@ object Duration {
   val Zero : Duration = new FiniteDuration(0, NANOSECONDS)
 
   trait Infinite {
-    self : Duration =>
+    this : Duration =>
 
     override def equals(other : Any) = false
 
