@@ -23,7 +23,7 @@ object Log {
   }
 }
 
-class RemotePingPong1Actor extends Actor with Serializable {
+class RemotePingPong1Actor extends Actor with java.io.Serializable {
   def receive = {
     case "Ping" =>
       Log.messageLog.put("ping")
@@ -41,7 +41,7 @@ class RemotePingPong1Actor extends Actor with Serializable {
   }
 }
 
-class RemotePingPong2Actor extends Actor with Serializable {
+class RemotePingPong2Actor extends Actor with java.io.Serializable {
   def receive = {
     case "Ping" =>
       Log.messageLog.put("ping")
@@ -55,7 +55,7 @@ class RemotePingPong2Actor extends Actor with Serializable {
   }
 }
 
-class RemotePingPong3Actor extends Actor with Serializable {
+class RemotePingPong3Actor extends Actor with java.io.Serializable {
   def receive = {
     case "Ping" =>
       Log.messageLog.put("ping")

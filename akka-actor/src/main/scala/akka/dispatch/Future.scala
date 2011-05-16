@@ -66,7 +66,7 @@ object Futures {
    * Returns a Future to the result of the first future in the list that is completed
    */
   def firstCompletedOf[T <: AnyRef](futures: java.lang.Iterable[Future[T]], timeout: Long): Future[T] =
-    firstCompletedOf(scala.collection.JavaConversions.iterableAsScalaIterable(futures),timeout)
+    firstCompletedOf(scala.collection.JavaConversions.asScalaIterable(futures),timeout)
 
   /**
    * A non-blocking fold over the specified futures.
@@ -92,7 +92,7 @@ object Futures {
             results add r.b
             if (results.size == allDone) { //Only one thread can get here
               try {
-                result completeWithResult scala.collection.JavaConversions.collectionAsScalaIterable(results).foldLeft(zero)(foldFun)
+                result completeWithResult scala.collection.JavaConversions.asScalaIterable(results).foldLeft(zero)(foldFun)
               } catch {
                 case e: Exception =>
                   EventHandler.error(e, this, e.getMessage)
@@ -120,7 +120,7 @@ object Futures {
    * or the result of the fold.
    */
   def fold[T <: AnyRef, R <: AnyRef](zero: R, timeout: Long, futures: java.lang.Iterable[Future[T]], fun: akka.japi.Function2[R, T, R]): Future[R] =
-    fold(zero, timeout)(scala.collection.JavaConversions.iterableAsScalaIterable(futures))( fun.apply _ )
+    fold(zero, timeout)(scala.collection.JavaConversions.asScalaIterable(futures))( fun.apply _ )
 
   /**
    * Initiates a fold over the supplied futures where the fold-zero is the result value of the Future that's completed first
@@ -155,7 +155,7 @@ object Futures {
    * Initiates a fold over the supplied futures where the fold-zero is the result value of the Future that's completed first
    */
   def reduce[T <: AnyRef, R >: T](futures: java.lang.Iterable[Future[T]], timeout: Long, fun: akka.japi.Function2[R, T, T]): Future[R] =
-    reduce(scala.collection.JavaConversions.iterableAsScalaIterable(futures), timeout)(fun.apply _)
+    reduce(scala.collection.JavaConversions.asScalaIterable(futures), timeout)(fun.apply _)
 
   /**
    * Java API.
@@ -163,7 +163,7 @@ object Futures {
    * Useful for reducing many Futures into a single Future.
    */
   def sequence[A](in: JIterable[Future[A]], timeout: Long): Future[JLinkedList[A]] =
-    scala.collection.JavaConversions.iterableAsScalaIterable(in).foldLeft(Future(new JLinkedList[A]()))((fr, fa) =>
+    scala.collection.JavaConversions.asScalaIterable(in).foldLeft(Future(new JLinkedList[A]()))((fr, fa) =>
       for (r <- fr; a <- fa) yield {
         r add a
         r
@@ -183,7 +183,7 @@ object Futures {
    * in parallel.
    */
   def traverse[A, B](in: JIterable[A], timeout: Long, fn: JFunc[A,Future[B]]): Future[JLinkedList[B]] =
-    scala.collection.JavaConversions.iterableAsScalaIterable(in).foldLeft(Future(new JLinkedList[B]())){(fr, a) =>
+    scala.collection.JavaConversions.asScalaIterable(in).foldLeft(Future(new JLinkedList[B]())){(fr, a) =>
       val fb = fn(a)
       for (r <- fr; b <- fb) yield {
         r add b
@@ -206,27 +206,27 @@ object Futures {
   /**
    * (Blocking!)
    */
-  @deprecated("Will be removed after 1.1, if you must block, use: futures.foreach(_.await)", "1.1")
+  @deprecated("Will be removed after 1.1, if you must block, use: futures.foreach(_.await)")
   def awaitAll(futures: List[Future[_]]): Unit = futures.foreach(_.await)
 
   /**
    *  Returns the First Future that is completed (blocking!)
    */
-  @deprecated("Will be removed after 1.1, if you must block, use: firstCompletedOf(futures).await", "1.1")
+  @deprecated("Will be removed after 1.1, if you must block, use: firstCompletedOf(futures).await")
   def awaitOne(futures: List[Future[_]], timeout: Long = Long.MaxValue): Future[_] = firstCompletedOf[Any](futures, timeout).await
 
 
   /**
    * Applies the supplied function to the specified collection of Futures after awaiting each future to be completed
    */
-  @deprecated("Will be removed after 1.1, if you must block, use: futures map { f => fun(f.await) }", "1.1")
+  @deprecated("Will be removed after 1.1, if you must block, use: futures map { f => fun(f.await) }")
   def awaitMap[A,B](in: Traversable[Future[A]])(fun: (Future[A]) => B): Traversable[B] =
     in map { f => fun(f.await) }
 
   /**
    * Returns Future.resultOrException of the first completed of the 2 Futures provided (blocking!)
    */
-  @deprecated("Will be removed after 1.1, if you must block, use: firstCompletedOf(List(f1,f2)).await.resultOrException", "1.1")
+  @deprecated("Will be removed after 1.1, if you must block, use: firstCompletedOf(List(f1,f2)).await.resultOrException")
   def awaitEither[T](f1: Future[T], f2: Future[T]): Option[T] = firstCompletedOf[T](List(f1,f2)).await.resultOrException
 }
 
@@ -349,7 +349,7 @@ sealed trait Future[+T] {
    * caution with this method as it ignores the timeout and will block
    * indefinitely if the Future is never completed.
    */
-  @deprecated("Will be removed after 1.1, it's dangerous and can cause deadlocks, agony and insanity.", "1.1")
+  @deprecated("Will be removed after 1.1, it's dangerous and can cause deadlocks, agony and insanity.")
   def awaitBlocking : Future[T]
 
   /**

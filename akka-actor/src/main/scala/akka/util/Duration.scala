@@ -37,7 +37,7 @@ object Duration {
    * Construct a Duration by parsing a String. In case of a format error, a
    * RuntimeException is thrown. See `unapply(String)` for more information.
    */
-  def apply(s : String) : Duration = unapply(s) getOrElse sys.error("format error")
+  def apply(s : String) : Duration = unapply(s) getOrElse error("format error")
 
   /**
    * Deconstruct a Duration into length and unit if it is finite.
@@ -77,7 +77,7 @@ object Duration {
       if ( ms ne null) Some(Duration(JDouble.parseDouble(length), MILLISECONDS)) else
       if (mus ne null) Some(Duration(JDouble.parseDouble(length), MICROSECONDS)) else
       if ( ns ne null) Some(Duration(JDouble.parseDouble(length), NANOSECONDS)) else
-      sys.error("made some error in regex (should not be possible)")
+      error("made some error in regex (should not be possible)")
     case REinf() => Some(Inf)
     case REminf() => Some(MinusInf)
     case _ => None
@@ -99,21 +99,10 @@ object Duration {
   val Zero : Duration = new FiniteDuration(0, NANOSECONDS)
 
   trait Infinite {
-    this : Duration =>
+    self : Duration =>
 
     override def equals(other : Any) = false
 
-    def +(other : Duration) : Duration =
-      other match {
-        case _ : this.type => this
-        case _ : Infinite => throw new IllegalArgumentException("illegal addition of infinities")
-        case _ => this
-      }
-    def -(other : Duration) : Duration =
-      other match {
-        case _ : this.type => throw new IllegalArgumentException("illegal subtraction of infinities")
-        case _ => this
-      }
     def *(factor : Double) : Duration = this
     def /(factor : Double) : Duration = this
     def /(other : Duration) : Double =
@@ -145,6 +134,17 @@ object Duration {
    */
   val Inf : Duration = new Duration with Infinite {
     override def toString = "Duration.Inf"
+    def +(other : Duration) : Duration =
+      other match {
+        case x if x eq this => this
+        case _ : Infinite => throw new IllegalArgumentException("illegal addition of infinities")
+        case _ => this
+      }
+    def -(other : Duration) : Duration =
+      other match {
+        case x if x eq this => throw new IllegalArgumentException("illegal subtraction of infinities")
+        case _ => this
+      }
     def >(other : Duration) = true
     def >=(other : Duration) = true
     def <(other : Duration) = false
@@ -157,6 +157,17 @@ object Duration {
    * including itself.
    */
   val MinusInf : Duration = new Duration with Infinite {
+    def +(other : Duration) : Duration =
+      other match {
+        case x if x eq this => this
+        case _ : Infinite => throw new IllegalArgumentException("illegal addition of infinities")
+        case _ => this
+      }
+    def -(other : Duration) : Duration =
+      other match {
+        case x if x eq this => throw new IllegalArgumentException("illegal subtraction of infinities")
+        case _ => this
+      }
     override def toString = "Duration.MinusInf"
     def >(other : Duration) = false
     def >=(other : Duration) = false

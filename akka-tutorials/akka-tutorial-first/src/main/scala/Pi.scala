@@ -12,9 +12,10 @@ import Routing._
 import System.{currentTimeMillis => now}
 import java.util.concurrent.CountDownLatch
 
-object Pi extends App {
+object Pi {
 
-  calculate(nrOfWorkers = 4, nrOfElements = 10000, nrOfMessages = 10000)
+  def main(args: Array[String]) =
+    calculate(nrOfWorkers = 4, nrOfElements = 10000, nrOfMessages = 10000)
 
   // ====================
   // ===== Messages =====

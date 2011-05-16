@@ -74,7 +74,7 @@ class AkkaParentProject(info: ProjectInfo) extends ParentProject(info) with Exec
   lazy val JACKSON_VERSION       = "1.7.1"
   lazy val JERSEY_VERSION        = "1.3"
   lazy val MULTIVERSE_VERSION    = "0.6.2"
-  lazy val SCALATEST_VERSION     = "1.4.RC3"
+  lazy val SCALATEST_VERSION     = "1.5.RC1"
   lazy val JETTY_VERSION         = "7.4.0.v20110414"
   lazy val JAVAX_SERVLET_VERSION = "3.0"
   lazy val SLF4J_VERSION         = "1.6.0"
@@ -86,55 +86,55 @@ class AkkaParentProject(info: ProjectInfo) extends ParentProject(info) with Exec
   object Dependencies {
 
     // Compile
-    lazy val aopalliance = "aopalliance" % "aopalliance" % "1.0" % "compile" //Public domain
+    lazy val aopalliance      = "aopalliance" % "aopalliance" % "1.0" % "compile" //Public domain
 
-    lazy val aspectwerkz = "org.codehaus.aspectwerkz" % "aspectwerkz" % "2.2.3" % "compile" //ApacheV2
+    lazy val aspectwerkz      = "org.codehaus.aspectwerkz" % "aspectwerkz" % "2.2.3" % "compile" //ApacheV2
 
-    lazy val commons_codec = "commons-codec" % "commons-codec" % "1.4" % "compile" //ApacheV2
+    lazy val commons_codec    = "commons-codec" % "commons-codec" % "1.4" % "compile" //ApacheV2
 
-    lazy val commons_io = "commons-io" % "commons-io" % "2.0.1" % "compile" //ApacheV2
+    lazy val commons_io       = "commons-io" % "commons-io" % "2.0.1" % "compile" //ApacheV2
 
     lazy val javax_servlet_30 = "org.glassfish" % "javax.servlet" % JAVAX_SERVLET_VERSION % "provided" //CDDL v1
 
-    lazy val jetty         = "org.eclipse.jetty" % "jetty-server"  % JETTY_VERSION % "provided" //Eclipse license
-    lazy val guicey = "org.guiceyfruit" % "guice-all" % "2.0" % "compile" //ApacheV2
+    lazy val jetty            = "org.eclipse.jetty" % "jetty-server"  % JETTY_VERSION % "provided" //Eclipse license
+    lazy val guicey           = "org.guiceyfruit" % "guice-all" % "2.0" % "compile" //ApacheV2
 
-    lazy val h2_lzf = "voldemort.store.compress" % "h2-lzf" % "1.0" % "compile" //ApacheV2
+    lazy val h2_lzf           = "voldemort.store.compress" % "h2-lzf" % "1.0" % "compile" //ApacheV2
 
     lazy val jackson          = "org.codehaus.jackson" % "jackson-mapper-asl" % JACKSON_VERSION % "compile" //ApacheV2
     lazy val jackson_core     = "org.codehaus.jackson" % "jackson-core-asl"   % JACKSON_VERSION % "compile" //ApacheV2
 
-    lazy val jersey_server  = "com.sun.jersey"          % "jersey-server" % JERSEY_VERSION % "provided" //CDDL v1
+    lazy val jersey_server    = "com.sun.jersey"          % "jersey-server" % JERSEY_VERSION % "provided" //CDDL v1
 
-    lazy val jsr250 = "javax.annotation" % "jsr250-api" % "1.0" % "compile" //CDDL v1
+    lazy val jsr250           = "javax.annotation" % "jsr250-api" % "1.0" % "compile" //CDDL v1
 
-    lazy val jsr311 = "javax.ws.rs" % "jsr311-api" % "1.1" % "compile" //CDDL v1
+    lazy val jsr311           = "javax.ws.rs" % "jsr311-api" % "1.1" % "compile" //CDDL v1
 
-    lazy val multiverse      = "org.multiverse" % "multiverse-alpha" % MULTIVERSE_VERSION % "compile" //ApacheV2
-    lazy val multiverse_test = "org.multiverse" % "multiverse-alpha" % MULTIVERSE_VERSION % "test" //ApacheV2
+    lazy val multiverse       = "org.multiverse" % "multiverse-alpha" % MULTIVERSE_VERSION % "compile" //ApacheV2
+    lazy val multiverse_test  = "org.multiverse" % "multiverse-alpha" % MULTIVERSE_VERSION % "test" //ApacheV2
 
-    lazy val netty = "org.jboss.netty" % "netty" % "3.2.3.Final" % "compile" //ApacheV2
+    lazy val netty            = "org.jboss.netty" % "netty" % "3.2.3.Final" % "compile" //ApacheV2
 
-    lazy val osgi_core = "org.osgi" % "org.osgi.core" % "4.2.0" //ApacheV2
+    lazy val osgi_core        = "org.osgi" % "org.osgi.core" % "4.2.0" //ApacheV2
 
-    lazy val protobuf = "com.google.protobuf" % "protobuf-java" % "2.3.0" % "compile" //New BSD
+    lazy val protobuf         = "com.google.protobuf" % "protobuf-java" % "2.3.0" % "compile" //New BSD
 
-    lazy val sjson      = "net.debasishg" %% "sjson" % "0.11" % "compile" //ApacheV2
-    lazy val sjson_test = "net.debasishg" %% "sjson" % "0.11" % "test" //ApacheV2
+    lazy val sjson            = "net.debasishg" %% "sjson" % "0.11" % "compile" //ApacheV2
+    lazy val sjson_test       = "net.debasishg" %% "sjson" % "0.11" % "test" //ApacheV2
 
-    lazy val slf4j   = "org.slf4j"      % "slf4j-api"       % SLF4J_VERSION
-    lazy val logback = "ch.qos.logback" % "logback-classic" % "0.9.28" % "runtime"
+    lazy val slf4j            = "org.slf4j"      % "slf4j-api"       % SLF4J_VERSION
+    lazy val logback          = "ch.qos.logback" % "logback-classic" % "0.9.28" % "runtime"
 
     // Test
 
-    lazy val commons_coll   = "commons-collections"    % "commons-collections" % "3.2.1"           % "test" //ApacheV2
+    lazy val commons_coll    = "commons-collections"    % "commons-collections" % "3.2.1"           % "test" //ApacheV2
 
-    lazy val testJetty      = "org.eclipse.jetty"      % "jetty-server"        % JETTY_VERSION     % "test" //Eclipse license
-    lazy val testJettyWebApp= "org.eclipse.jetty"      % "jetty-webapp"        % JETTY_VERSION     % "test" //Eclipse license
+    lazy val testJetty       = "org.eclipse.jetty"      % "jetty-server"        % JETTY_VERSION     % "test" //Eclipse license
+    lazy val testJettyWebApp = "org.eclipse.jetty"      % "jetty-webapp"        % JETTY_VERSION     % "test" //Eclipse license
 
-    lazy val junit          = "junit"                  % "junit"               % "4.5"             % "test" //Common Public License 1.0
-    lazy val mockito        = "org.mockito"            % "mockito-all"         % "1.8.1"           % "test" //MIT
-    lazy val scalatest      = "org.scalatest"          %% "scalatest"          % SCALATEST_VERSION % "test" //ApacheV2
+    lazy val junit           = "junit"                  % "junit"               % "4.5"             % "test" //Common Public License 1.0
+    lazy val mockito         = "org.mockito"            % "mockito-all"         % "1.8.1"           % "test" //MIT
+    lazy val scalatest       = "org.scalatest"          %% "scalatest"          % SCALATEST_VERSION % "test" //ApacheV2
   }
 
   // -------------------------------------------------------------------------------------------------------------------

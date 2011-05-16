@@ -54,6 +54,7 @@ import akka.japi.{Creator, Procedure}
  *
  * @author <a href="http://jonasboner.com">Jonas Bon&#233;r</a>
  */
+@SuppressWarnings(Array("unchecked"))
 abstract class UntypedActor extends Actor {
 
   /**

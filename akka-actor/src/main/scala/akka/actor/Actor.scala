@@ -19,7 +19,7 @@ import java.lang.reflect.InvocationTargetException
 /**
  * Life-cycle messages for the Actors
  */
-sealed trait LifeCycleMessage extends Serializable
+sealed trait LifeCycleMessage extends java.io.Serializable
 
 /* Marker trait to show which Messages are automatically handled by Akka */
 sealed trait AutoReceivedMessage { self: LifeCycleMessage => }
