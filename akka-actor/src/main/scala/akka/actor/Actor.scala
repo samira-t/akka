@@ -315,7 +315,9 @@ trait Actor {
    * Mainly for internal use, functions as the implicit sender references when invoking
    * the 'forward' function.
    */
-  @transient implicit val someSelf: Some[ActorRef] = {
+  implicit def someSelf: Some[ActorRef] = _someSelf
+
+  @transient private val _someSelf: Some[ActorRef] = {
     val optRef = Actor.actorRefInCreation.get
     if (optRef.isEmpty) throw new ActorInitializationException(
       "ActorRef for instance of actor [" + getClass.getName + "] is not in scope." +
