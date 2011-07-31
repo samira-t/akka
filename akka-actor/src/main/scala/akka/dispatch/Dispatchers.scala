@@ -192,9 +192,10 @@ object Dispatchers {
    */
   def from(cfg: Configuration): Option[MessageDispatcher] = {
     cfg.getString("type") map {
-      case "Dispatcher"          ⇒ new DispatcherConfigurator()
-      case "BalancingDispatcher" ⇒ new BalancingDispatcherConfigurator()
-      case "GlobalDispatcher"    ⇒ GlobalDispatcherConfigurator
+      case "Dispatcher"           ⇒ new DispatcherConfigurator()
+      case "BalancingDispatcher"  ⇒ new BalancingDispatcherConfigurator()
+      case "DelegatingDispatcher" ⇒ new DelegatingDispatcherConfigurator()
+      case "GlobalDispatcher"     ⇒ GlobalDispatcherConfigurator
       case fqn ⇒
         ReflectiveAccess.getClassFor[MessageDispatcherConfigurator](fqn) match {
           case Right(clazz) ⇒
@@ -231,6 +232,17 @@ class DispatcherConfigurator extends MessageDispatcherConfigurator {
 class BalancingDispatcherConfigurator extends MessageDispatcherConfigurator {
   def configure(config: Configuration): MessageDispatcher = {
     configureThreadPool(config, threadPoolConfig ⇒ new BalancingDispatcher(
+      config.getString("name", newUuid.toString),
+      config.getInt("throughput", Dispatchers.THROUGHPUT),
+      config.getInt("throughput-deadline-time", Dispatchers.THROUGHPUT_DEADLINE_TIME_MILLIS),
+      mailboxType(config),
+      threadPoolConfig)).build
+  }
+}
+
+class DelegatingDispatcherConfigurator extends MessageDispatcherConfigurator {
+  def configure(config: Configuration): MessageDispatcher = {
+    configureThreadPool(config, threadPoolConfig ⇒ new DelegatingDispatcher(
       config.getString("name", newUuid.toString),
       config.getInt("throughput", Dispatchers.THROUGHPUT),
       config.getInt("throughput-deadline-time", Dispatchers.THROUGHPUT_DEADLINE_TIME_MILLIS),

@@ -311,3 +311,174 @@ trait PriorityMailbox { self: Dispatcher ⇒
       }
   }
 }
+
+class DelegatingDispatcher(
+  _name: String,
+  val throughput: Int = Dispatchers.THROUGHPUT,
+  val throughputDeadlineTime: Int = Dispatchers.THROUGHPUT_DEADLINE_TIME_MILLIS,
+  val mailboxType: MailboxType = Dispatchers.MAILBOX_TYPE,
+  executorServiceFactoryProvider: ExecutorServiceFactoryProvider = ThreadPoolConfig())
+  extends MessageDispatcher {
+
+  def this(_name: String, throughput: Int, throughputDeadlineTime: Int, mailboxType: MailboxType) =
+    this(_name, throughput, throughputDeadlineTime, mailboxType, ThreadPoolConfig()) // Needed for Java API usage
+
+  def this(_name: String, throughput: Int, mailboxType: MailboxType) =
+    this(_name, throughput, Dispatchers.THROUGHPUT_DEADLINE_TIME_MILLIS, mailboxType) // Needed for Java API usage
+
+  def this(_name: String, throughput: Int) =
+    this(_name, throughput, Dispatchers.THROUGHPUT_DEADLINE_TIME_MILLIS, Dispatchers.MAILBOX_TYPE) // Needed for Java API usage
+
+  def this(_name: String, _executorServiceFactoryProvider: ExecutorServiceFactoryProvider) =
+    this(_name, Dispatchers.THROUGHPUT, Dispatchers.THROUGHPUT_DEADLINE_TIME_MILLIS, Dispatchers.MAILBOX_TYPE, _executorServiceFactoryProvider)
+
+  def this(_name: String) =
+    this(_name, Dispatchers.THROUGHPUT, Dispatchers.THROUGHPUT_DEADLINE_TIME_MILLIS, Dispatchers.MAILBOX_TYPE) // Needed for Java API usage
+
+  val name = "akka:event-driven:delegating-dispatcher:" + _name
+
+  private[akka] val executorServiceFactory = executorServiceFactoryProvider.createExecutorServiceFactory(name)
+  private[akka] val executorService = new AtomicReference[ExecutorService](new LazyExecutorServiceWrapper(executorServiceFactory.createExecutorService))
+
+  private[akka] def dispatch(invocation: MessageInvocation) = {
+    val mbox = getMailbox(invocation.receiver)
+    mbox enqueue invocation
+    registerForExecution(mbox)
+  }
+
+  private[akka] def executeFuture(invocation: FutureInvocation[_]): Unit = if (active.isOn) {
+    try executorService.get() execute invocation
+    catch {
+      case e: RejectedExecutionException ⇒
+        EventHandler.warning(this, e.toString)
+        throw e
+    }
+  }
+
+  /**
+   * @return the mailbox associated with the actor
+   */
+  protected[akka] def getMailbox(receiver: ActorRef) = receiver.mailbox.asInstanceOf[MessageQueue with DelegatingMailbox]
+
+  def mailboxIsEmpty(actorRef: ActorRef): Boolean = getMailbox(actorRef).isEmpty
+
+  override def mailboxSize(actorRef: ActorRef) = getMailbox(actorRef).size
+
+  override def createMailbox(actorRef: ActorRef): AnyRef = mailboxType match {
+    case b: UnboundedMailbox ⇒
+      new ConcurrentLinkedQueue[MessageInvocation] with MessageQueue with DelegatingMailbox {
+        @inline
+        final def dispatcher = DelegatingDispatcher.this
+        @inline
+        final def enqueue(m: MessageInvocation) = this.add(m)
+        @inline
+        final def dequeue(): MessageInvocation = this.poll()
+      }
+    case b: BoundedMailbox ⇒
+      new DefaultBoundedMessageQueue(b.capacity, b.pushTimeOut) with DelegatingMailbox {
+        @inline
+        final def dispatcher = DelegatingDispatcher.this
+      }
+  }
+
+  private[akka] def start {}
+
+  private[akka] def shutdown {
+    val old = executorService.getAndSet(new LazyExecutorServiceWrapper(executorServiceFactory.createExecutorService))
+    if (old ne null) {
+      old.shutdownNow()
+    }
+  }
+
+  private[akka] def registerForExecution(mbox: MessageQueue with DelegatingMailbox): Unit = {
+    if (!mbox.guard.lock.isLocked) {
+      if (mbox.dispatcherLock.tryLock()) {
+        if (active.isOn && !mbox.suspended.locked) { //If the dispatcher is active and the actor not suspended
+          try {
+            executorService.get() execute mbox
+          } catch {
+            case e: RejectedExecutionException ⇒
+              EventHandler.warning(this, e.toString)
+              mbox.dispatcherLock.unlock()
+              throw e
+          }
+        } else {
+          mbox.dispatcherLock.unlock() //If the dispatcher isn't active or if the actor is suspended, unlock the dispatcher lock
+        }
+      }
+    }
+  }
+
+  private[akka] def reRegisterForExecution(mbox: MessageQueue with DelegatingMailbox): Unit =
+    registerForExecution(mbox)
+
+  protected override def cleanUpMailboxFor(actorRef: ActorRef) {
+    val m = getMailbox(actorRef)
+    if (!m.isEmpty) {
+      var invocation = m.dequeue
+      lazy val exception = new ActorKilledException("Actor has been stopped")
+      while (invocation ne null) {
+        invocation.channel.sendException(exception)
+        invocation = m.dequeue
+      }
+    }
+  }
+
+  override val toString = getClass.getSimpleName + "[" + name + "]"
+
+  def suspend(actorRef: ActorRef) {
+    getMailbox(actorRef).suspended.tryLock
+  }
+
+  def resume(actorRef: ActorRef) {
+    val mbox = getMailbox(actorRef)
+    mbox.suspended.tryUnlock
+    reRegisterForExecution(mbox)
+  }
+}
+
+trait DelegatingMailbox extends Runnable { self: MessageQueue ⇒
+
+  def dispatcher: DelegatingDispatcher
+
+  val guard = new akka.util.ReentrantGuard
+
+  final def run = {
+    try {
+      if (guard.lock.tryLock()) {
+        try { processMailbox(defaultLimiter) } catch {
+          case ie: InterruptedException ⇒ Thread.currentThread().interrupt() //Restore interrupt
+        } finally {
+          guard.lock.unlock()
+        }
+      }
+    } finally {
+      dispatcherLock.unlock()
+      if (!self.isEmpty)
+        dispatcher.reRegisterForExecution(this)
+    }
+  }
+
+  def defaultLimiter: (Int) ⇒ Boolean =
+    if (dispatcher.throughputDeadlineTime > 0) {
+      val deadlineNs = System.nanoTime + TimeUnit.MILLISECONDS.toNanos(dispatcher.throughputDeadlineTime)
+      ((processedMessages: Int) ⇒ (processedMessages >= dispatcher.throughput) || (System.nanoTime >= deadlineNs))
+    } else ((_: Int) >= dispatcher.throughput)
+
+  /**
+   * Process the messages in the mailbox
+   *
+   * @return true if the processing finished before the mailbox was empty, due to the throughput constraint
+   */
+  final def processMailbox(limiter: (Int) ⇒ Boolean) {
+    if (!self.suspended.locked) {
+      var processedMessages = 0
+      var nextMessage = self.dequeue
+      while (nextMessage ne null) {
+        nextMessage.invoke
+        processedMessages += 1
+        nextMessage = if (self.suspended.locked || limiter(processedMessages)) null else self.dequeue
+      }
+    }
+  }
+}

@@ -1014,7 +1014,7 @@ class DefaultPromise[T](val timeout: Timeout) extends Promise[T] {
   private def timeLeft(): Long = timeoutInNanos - (currentTimeInNanos - _startTimeInNanos)
 }
 
-class ActorPromise(timeout: Timeout) extends DefaultPromise[Any](timeout) with ForwardableChannel {
+class ActorPromise(timeout: Timeout, actor: Option[akka.actor.LocalActorRef] = None) extends DefaultPromise[Any](timeout) with ForwardableChannel {
 
   def !(message: Any)(implicit channel: UntypedChannel = NullChannel) = completeWithResult(message)
 
@@ -1029,6 +1029,26 @@ class ActorPromise(timeout: Timeout) extends DefaultPromise[Any](timeout) with F
 
   @deprecated("ActorPromise merged with Channel[Any], just use 'this'", "1.2")
   def future = this
+
+  override def await = {
+    if (actor.isDefined && !isCompleted && !isExpired) {
+      val _actor = actor.get
+      _actor.dispatcher match {
+        case dispatcher: DelegatingDispatcher ⇒
+          val mailbox = dispatcher.getMailbox(_actor)
+          if (mailbox.guard.lock.tryLock) {
+            try {
+              mailbox.processMailbox(_ ⇒ isCompleted || isExpired)
+            } finally {
+              mailbox.guard.lock.unlock
+              dispatcher.reRegisterForExecution(mailbox)
+            }
+          }
+        case _ ⇒
+      }
+    }
+    super.await
+  }
 }
 
 object ActorPromise {

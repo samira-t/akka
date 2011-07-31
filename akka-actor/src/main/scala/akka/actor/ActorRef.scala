@@ -680,7 +680,7 @@ class LocalActorRef private[akka] (private[this] val actorFactory: () ⇒ Actor,
     channel: UntypedChannel): Future[Any] = {
     val future = channel match {
       case f: ActorPromise ⇒ f
-      case _               ⇒ new ActorPromise(timeout)
+      case _               ⇒ new ActorPromise(timeout, Some(this))
     }
     dispatcher dispatchMessage new MessageInvocation(this, message, future)
     future
