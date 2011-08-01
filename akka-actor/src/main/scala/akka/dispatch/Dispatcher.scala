@@ -6,6 +6,7 @@ package akka.dispatch
 
 import akka.event.EventHandler
 import java.util.concurrent.atomic.AtomicReference
+import java.util.concurrent.locks.ReentrantLock
 import java.util.concurrent.{ TimeUnit, ExecutorService, RejectedExecutionException, ConcurrentLinkedQueue }
 import akka.actor.{ ActorKilledException, ActorRef }
 
@@ -391,7 +392,7 @@ class DelegatingDispatcher(
   }
 
   private[akka] def registerForExecution(mbox: MessageQueue with DelegatingMailbox): Unit = {
-    if (!mbox.guard.lock.isLocked) {
+    if (!mbox.processLock.isLocked) {
       if (mbox.dispatcherLock.tryLock()) {
         if (active.isOn && !mbox.suspended.locked) { //If the dispatcher is active and the actor not suspended
           try {
@@ -441,17 +442,33 @@ trait DelegatingMailbox extends Runnable { self: MessageQueue ⇒
 
   def dispatcher: DelegatingDispatcher
 
-  val guard = new akka.util.ReentrantGuard
+  val processLock = new ReentrantLock
 
-  final def run = {
+  val waitingLock = new ReentrantLock
+
+  val signal = waitingLock.newCondition
+
+  def signalWaiting {
+    waitingLock.lock
     try {
-      if (guard.lock.tryLock()) {
-        try { processMailbox(defaultLimiter) } catch {
-          case ie: InterruptedException ⇒ Thread.currentThread().interrupt() //Restore interrupt
-        } finally {
-          guard.lock.unlock()
-        }
-      }
+      signal.signalAll
+    } finally {
+      waitingLock.unlock
+    }
+  }
+
+  def hasWaiting: Boolean = {
+    waitingLock.lock
+    try {
+      waitingLock.hasWaiters(signal)
+    } finally {
+      waitingLock.unlock
+    }
+  }
+
+  final def run {
+    try {
+      processMailbox(defaultLimiter)
     } finally {
       dispatcherLock.unlock()
       if (!self.isEmpty)
@@ -462,23 +479,28 @@ trait DelegatingMailbox extends Runnable { self: MessageQueue ⇒
   def defaultLimiter: (Int) ⇒ Boolean =
     if (dispatcher.throughputDeadlineTime > 0) {
       val deadlineNs = System.nanoTime + TimeUnit.MILLISECONDS.toNanos(dispatcher.throughputDeadlineTime)
-      ((processedMessages: Int) ⇒ (processedMessages >= dispatcher.throughput) || (System.nanoTime >= deadlineNs))
-    } else ((_: Int) >= dispatcher.throughput)
+      ((processedMessages: Int) ⇒ (processedMessages >= dispatcher.throughput) || (System.nanoTime >= deadlineNs) || hasWaiting)
+    } else ((processedMessages: Int) ⇒ (processedMessages >= dispatcher.throughput) || hasWaiting)
 
-  /**
-   * Process the messages in the mailbox
-   *
-   * @return true if the processing finished before the mailbox was empty, due to the throughput constraint
-   */
-  final def processMailbox(limiter: (Int) ⇒ Boolean) {
-    if (!self.suspended.locked) {
-      var processedMessages = 0
-      var nextMessage = self.dequeue
-      while (nextMessage ne null) {
-        nextMessage.invoke
-        processedMessages += 1
-        nextMessage = if (self.suspended.locked || limiter(processedMessages)) null else self.dequeue
+  final def processMailbox(limiter: (Int) ⇒ Boolean): Boolean = {
+    if (processLock.tryLock) {
+      try {
+        if (!self.suspended.locked) {
+          var processedMessages = 0
+          var nextMessage = self.dequeue
+          while (nextMessage ne null) {
+            nextMessage.invoke
+            processedMessages += 1
+            nextMessage = if (self.suspended.locked || limiter(processedMessages)) null else self.dequeue
+          }
+        }
+      } catch {
+        case ie: InterruptedException ⇒ Thread.currentThread().interrupt() //Restore interrupt
+      } finally {
+        processLock.unlock()
+        signalWaiting
       }
-    }
+      true
+    } else false
   }
 }

@@ -1011,7 +1011,7 @@ class DefaultPromise[T](val timeout: Timeout) extends Promise[T] {
   @inline
   private def currentTimeInNanos: Long = MILLIS.toNanos(System.currentTimeMillis)
   @inline
-  private def timeLeft(): Long = timeoutInNanos - (currentTimeInNanos - _startTimeInNanos)
+  protected final def timeLeft(): Long = timeoutInNanos - (currentTimeInNanos - _startTimeInNanos)
 }
 
 class ActorPromise(timeout: Timeout, actor: Option[akka.actor.LocalActorRef] = None) extends DefaultPromise[Any](timeout) with ForwardableChannel {
@@ -1030,24 +1030,51 @@ class ActorPromise(timeout: Timeout, actor: Option[akka.actor.LocalActorRef] = N
   @deprecated("ActorPromise merged with Channel[Any], just use 'this'", "1.2")
   def future = this
 
-  override def await = {
-    if (actor.isDefined && !isCompleted && !isExpired) {
-      val _actor = actor.get
-      _actor.dispatcher match {
+  private val processedMailbox = new AtomicBoolean(false)
+
+  override def await = actor match {
+    case Some(actor) if !processedMailbox.getAndSet(true) && !isCompleted && !isExpired ⇒
+      actor.dispatcher match {
         case dispatcher: DelegatingDispatcher ⇒
-          val mailbox = dispatcher.getMailbox(_actor)
-          if (mailbox.guard.lock.tryLock) {
-            try {
-              mailbox.processMailbox(_ ⇒ isCompleted || isExpired)
-            } finally {
-              mailbox.guard.lock.unlock
+          val mailbox = dispatcher.getMailbox(actor)
+          var run = true
+          while (run) {
+            if (mailbox.processMailbox(_ ⇒ isCompleted || isExpired)) {
               dispatcher.reRegisterForExecution(mailbox)
+              run = false
+            } else {
+              mailbox.waitingLock.lock()
+              try {
+                if (!isCompleted) {
+                  mailbox.signal.awaitNanos(timeLeft)
+                }
+              } catch {
+                case e: InterruptedException ⇒
+              } finally {
+                mailbox.waitingLock.unlock()
+              }
+              run = (!isCompleted && !isExpired)
             }
           }
-        case _ ⇒
+          super.await
+        case _ ⇒ super.await
       }
+    case _ ⇒ super.await
+  }
+
+  override def complete(value: Either[Throwable, Any]) = {
+    super.complete(value)
+    actor match {
+      case Some(actor) if processedMailbox.get ⇒
+        actor.dispatcher match {
+          case dispatcher: DelegatingDispatcher ⇒
+            val mailbox = dispatcher.getMailbox(actor)
+            mailbox.signalWaiting
+          case _ ⇒
+        }
+      case _ ⇒
     }
-    super.await
+    this
   }
 }
 
