@@ -398,7 +398,7 @@ object Dependencies {
 
   val spring = Seq(springBeans, springContext, Test.camelSpring, Test.junit, Test.scalatest)
 
-  val zeromq = Seq(protobuf, Test.scalatest) // Add 'jzmq' to dependencies when available on Typesafe's repo
+  val zeromq = Seq(protobuf, Test.scalatest, jzmq)
 
   val kernel = Seq(
     jettyUtil, jettyXml, jettyServlet, jerseyCore, jerseyJson, jerseyScala,
