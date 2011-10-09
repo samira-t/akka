@@ -44,6 +44,15 @@ object AkkaBuild extends Build {
     )
   )
 
+  lazy val setack = Project(
+    id = "akka-setack",
+    base = file("akka-setack"),
+    dependencies = Seq(actor),
+    settings = defaultSettings ++ Seq(
+      libraryDependencies ++= Dependencies.setack
+    )
+  )
+
   lazy val actorTests = Project(
     id = "akka-actor-tests",
     base = file("akka-actor-tests"),
@@ -374,6 +383,7 @@ object Dependencies {
   import Dependency._
 
   val testkit = Seq(Test.scalatest)
+  val setack = Seq(junit, scalatest)
 
   val actorTests = Seq(
     Test.junit, Test.scalatest, Test.multiverse, Test.commonsMath, Test.mockito,
@@ -472,6 +482,8 @@ object Dependency {
   val zkClient      = "zkclient"                    % "zkclient"               % "0.3"        // ApacheV2
   val zookeeper     = "org.apache.hadoop.zookeeper" % "zookeeper"              % V.Zookeeper  // ApacheV2
   val zookeeperLock = "org.apache.hadoop.zookeeper" % "zookeeper-recipes-lock" % V.Zookeeper  // ApacheV2
+  val junit       = "junit"                   % "junit"               % "4.5"        // Common Public License 1.0
+  val scalatest   = "org.scalatest"           % "scalatest_2.9.0"     % V.Scalatest  // ApacheV2
 
   // Provided
 
