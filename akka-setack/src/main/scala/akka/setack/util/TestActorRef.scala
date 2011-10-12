@@ -225,5 +225,5 @@ object TestActorRef {
    */
   def actorOf(props: Props, address: String): TestActorRef =
     //provider.actorOf(props.withDispatcher(TestDispatcher), address).get
-    new TestActorRef(props.withDispatcher(TestDispatcher), address)
+    new TestActorRef(props.withDispatcher(TestDispatcher.testDispatcher), address)
 }

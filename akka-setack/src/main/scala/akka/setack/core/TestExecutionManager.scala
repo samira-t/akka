@@ -12,6 +12,7 @@ import akka.actor.LocalActorRef
 import akka.setack.core.dispatcher.TestDispatcher
 import scala.collection.mutable.HashSet
 import scala.collection.mutable.ArrayBuffer
+import TestDispatcher._
 
 /**
  * @author <a href="http://www.cs.illinois.edu/homes/tasharo1">Samira Tasharofi</a>
@@ -25,6 +26,7 @@ object TestExecutionManager {
    */
   def startTest {
     monitor.Monitor.startMonitoring()
+    TestDispatcher.createNewInstance()
   }
 
   /**
@@ -45,10 +47,9 @@ object TestExecutionManager {
     {
       var triedCheck = 0
       var isStable = false
-      val testActors = Actor.registry.local.filter(a ⇒ a.isInstanceOf[TestActorRef])
       while (triedCheck < maxTry) {
-        if (triedCheck > 0)
-          Thread.sleep(100)
+        //if (triedCheck > 0)
+        Thread.sleep(100)
         triedCheck += 1
 
         var someIsRunning = false
@@ -63,7 +64,8 @@ object TestExecutionManager {
             someIsRunning = true
           }
         }
-*/ for (a ← Actor.registry.local) {
+*/
+        for (a ← Actor.registry.local) {
 
           if (a.isRunning && !a.asInstanceOf[LocalActorRef].dispatcher.mailboxIsEmpty(a.asInstanceOf[LocalActorRef])) {
             log(a + " has message")
@@ -74,7 +76,7 @@ object TestExecutionManager {
         }
 
         if (!someIsRunning) {
-          if (!TestDispatcher.isFinished) {
+          if (!testDispatcher.isFinished) {
             someIsRunning = true
           } else if (traceMonitorActor.isRunning &&
             !traceMonitorActor.asInstanceOf[LocalActorRef].dispatcher.mailboxIsEmpty(traceMonitorActor.asInstanceOf[LocalActorRef])) {
@@ -91,6 +93,7 @@ object TestExecutionManager {
         }
         if (!someIsRunning) return true
       }
+      println("no stable")
       return false
 
     }
@@ -108,9 +111,8 @@ object TestExecutionManager {
     }
     Actor.registry.local.shutdownAll
     monitor.Monitor.stopMonitoring()
-    TestDispatcher.clearState()
     if (!stable) {
-      log(" The system did not get stable after the test, tear down")
+      println(" The system did not get stable after the test, tear down")
 
     }
 

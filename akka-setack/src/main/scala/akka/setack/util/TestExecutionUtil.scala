@@ -31,7 +31,7 @@ object TestExecutionUtil {
    */
   def setSchedule(partialOrders: TestMessageInvocationSequence*) {
     var pordersSet = partialOrders.toSet[TestMessageInvocationSequence]
-    TestDispatcher.currentSchedule_=(new TestSchedule(pordersSet))
+    TestDispatcher.testDispatcher.currentSchedule_=(new TestSchedule(pordersSet))
   }
 
 }

@@ -18,7 +18,7 @@ import akka.setack.core.TestActorRef
  * @author <a href="http://www.cs.illinois.edu/homes/tasharo1">Samira Tasharofi</a>
  */
 
-object TestDispatcher extends Dispatcher("TestDispatcher") {
+class TestDispatcher extends Dispatcher("TestDispatcher") {
 
   /**
    * A holder for the messages that are supposed to be delivered later
@@ -36,6 +36,7 @@ object TestDispatcher extends Dispatcher("TestDispatcher") {
    * 2) inform the monitor actor about the delivery
    */
   override protected[akka] def dispatch(invocation: MessageInvocation) = {
+    //println("dispatch is called" + invocation.message)
     getMailbox(invocation.receiver) match {
       case null ⇒ throw new ActorInitializationException("Actor has not been started, you need to invoke 'actor.start()' before using it")
       case mbox ⇒
@@ -98,7 +99,7 @@ object TestDispatcher extends Dispatcher("TestDispatcher") {
   }
 
   def clearState() {
-    _currentSchedule = new TestSchedule
+    _currentSchedule = null
     cloudMessages.clear()
   }
 
@@ -115,6 +116,16 @@ object TestDispatcher extends Dispatcher("TestDispatcher") {
   def currentSchedule_=(schedule: TestSchedule): Unit = {
     _currentSchedule = schedule
     //println("current schedule= " + _currentSchedule.toString())
+  }
+
+}
+
+object TestDispatcher {
+  private var instance = new TestDispatcher
+  def testDispatcher: TestDispatcher = instance
+
+  def createNewInstance() {
+    instance = new TestDispatcher
   }
 
 }

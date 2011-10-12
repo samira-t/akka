@@ -11,6 +11,7 @@ import scala.collection.mutable.HashSet
 import scala.collection.mutable.HashMap
 import akka.setack.core.TestMessageInvocation
 import akka.setack.core.MessageEventEnum._
+import akka.actor.LocalActorRef
 
 abstract class MonitorActorMessage
 case class AsyncMessageEvent(message: MessageInvocation, event: MessageEventType) extends MonitorActorMessage
@@ -97,6 +98,7 @@ class TraceMonitorActor(definedTestMessages: HashSet[TestMessageInvocation]) ext
               testMessagesInfo.update(testMsg, Array(dp(0), dp(1) + 1))
               val index = deliveredAsyncMessages.indexOf(message)
               if (index >= 0) deliveredAsyncMessages.remove(index)
+              //if (message.message.equals("Reply")) println("reply" + index + " " + testMessagesInfo(testMsg)(1))
               //processedAsyncMessages.+=(message)
               //println("received processing: " + message.message + " " + message.receiver)
               //println(processedMessages.size)
@@ -119,12 +121,20 @@ class TraceMonitorActor(definedTestMessages: HashSet[TestMessageInvocation]) ext
       case MatchedMessageEventCount(testMessage, event) ⇒ {
         event match {
           case Delivered ⇒ self.reply(testMessagesInfo(testMessage)(0))
-          case Processed ⇒ self.reply(testMessagesInfo(testMessage)(1))
+          case Processed ⇒ {
+            self.reply(testMessagesInfo(testMessage)(1))
+            log(testMessage.message + " " + testMessagesInfo(testMessage)(1) + " " + testMessagesInfo(testMessage)(0))
+          }
         }
       }
       case AllDeliveredMessagesAreProcessed ⇒ self.reply(deliveredAsyncMessages.length == 0)
       case NotProcessedMessages             ⇒ self.reply(deliveredAsyncMessages)
 
     }
+
+  private def log(logMsg: String) {
+    //println(logMsg)
+
+  }
 
 }

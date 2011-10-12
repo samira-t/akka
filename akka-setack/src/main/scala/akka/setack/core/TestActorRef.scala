@@ -13,12 +13,13 @@ import java.util.concurrent.atomic.AtomicReference
 import akka.actor.Props
 import com.eaio.uuid.UUID
 import akka.setack.util.TestActorRef._
+import TestDispatcher._
 
 /**
  * @author <a href="http://www.cs.illinois.edu/homes/tasharo1">Samira Tasharofi</a>
  */
 
-class TestActorRef(props: Props, address: String) extends LocalActorRef(props.withDispatcher(TestDispatcher), address, false) {
+class TestActorRef(props: Props, address: String) extends LocalActorRef(props.withDispatcher(testDispatcher), address, false) {
   import MessageEventEnum._
 
   override def restart(reason: Throwable, maxNrOfRetries: Option[Int], withinTimeRange: Option[Int]) {
