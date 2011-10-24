@@ -7,8 +7,8 @@ package akka.setack.test
 import org.scalatest.WordSpec
 import org.scalatest.matchers.MustMatchers
 
-import akka.setack.util.TestActorRef._
-import akka.setack.util.TestMessage._
+import akka.setack.util.TestActorRefFactory._
+import akka.setack.util.TestMessageUtil._
 import akka.setack.util.TestExecutionUtil._
 import akka.setack.util.Assert._
 import akka.setack.core.TestMessageInvocation
@@ -24,26 +24,27 @@ class HotSwapSpec extends SetackWordSpec with MustMatchers {
 
   "An Actor" must {
 
-    "be able to hotswap its behavior with HotSwap(..)" in {
-      //val barrier = TestBarrier(2)
-      @volatile
-      var _log = ""
-      val a = actorOf(new Actor {
-        def receive = { case _ ⇒ _log += "default" }
-      })
-      a ! HotSwap(self ⇒ {
-        case _ ⇒
-          _log += "swapped"
-        //barrier.await
-      })
-      a ! "swapped"
-      //barrier.await
-
-      /* Added by Setack */
-      whenStable {
-        _log must be("swapped")
-      }
-    }
+    //    "be able to hotswap its behavior with HotSwap(..)" in {
+    //      //val barrier = TestBarrier(2)
+    //      @volatile
+    //      var _log = ""
+    //      val a = actorOf(new Actor {
+    //        def receive = { case _ ⇒ _log += "default" }
+    //      })
+    //      a ! HotSwap(self ⇒ {
+    //        case _ ⇒
+    //          _log += "swapped"
+    //        //barrier.await
+    //      })
+    //      a ! "swapped"
+    //      //barrier.await
+    //
+    //      /* Added by Setack */
+    //      whenStable {
+    //        _log must be("swapped")
+    //
+    //      }
+    //    }
 
     "be able to hotswap its behavior with become(..)" in {
       //val barrier = TestBarrier(2)

@@ -4,10 +4,10 @@
 package akka.setack.test
 
 import akka.setack._
-import akka.setack.util.TestMessage._
+import akka.setack.util.TestMessageUtil._
 import akka.setack.util.TestExecutionUtil._
 import akka.setack.util.Assert._
-import akka.setack.util.TestActorRef._
+import akka.setack.util.TestActorRefFactory._
 import org.junit.Test
 import org.junit.Before
 import org.junit.After

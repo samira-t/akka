@@ -6,8 +6,8 @@ package akka.setack.test
 
 import akka.actor.Actor
 import akka.actor.ActorRef
-import akka.setack.util.TestActorRef._
-import akka.setack.util.TestMessage._
+import akka.setack.util.TestActorRefFactory._
+import akka.setack.util.TestMessageUtil._
 import akka.setack.util.TestExecutionUtil._
 import akka.setack.util.Assert._
 import org.junit.Test
@@ -74,6 +74,7 @@ class Consumer(buf: ActorRef) extends Actor {
     case Consume(count) ⇒ {
       for (i ← 1 to count) {
         token = (buf ? Get).get.asInstanceOf[Int]
+        //println(token)
       }
     }
   }
@@ -116,6 +117,7 @@ class TestBoundedBuffer extends SetackJUnit with org.scalatest.junit.JUnitSuite 
     consumer ! Consume(1)
     // Phase1
     whenStable {
+      println(consumer.actorObject[Consumer].token)
       assert(consumer.actorObject[Consumer].token == 1)
     }
 
@@ -125,6 +127,7 @@ class TestBoundedBuffer extends SetackJUnit with org.scalatest.junit.JUnitSuite 
     consumer ! Consume(1)
 
     whenStable {
+      //println(consumer.actorObject[Consumer].token)
       assert(consumer.actorObject[Consumer].token == 3)
     }
   }

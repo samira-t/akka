@@ -5,7 +5,6 @@ package akka.setack.util
 import akka.setack.core.monitor.Monitor
 import scala.collection.mutable.HashSet
 import akka.setack.core.TestExecutionManager
-import akka.setack.TestSettings
 
 /**
  * This object contains different kinds of assertions that can be used by the
@@ -19,8 +18,8 @@ object Assert {
    * Waits for the system to get stable and then checks the expression. Throws exception
    * if the system does not get stable after maximum try.
    */
-  def assertWhenStable(expression: ⇒ Boolean, message: String = "", tryCount: Int = TestSettings.maxTryForStability) {
-    val isStable = TestExecutionManager.checkForStability(tryCount)
+  def assertWhenStable(expression: ⇒ Boolean, message: String = "") {
+    val isStable = TestExecutionManager.checkForStability()
     if (isStable) {
       assert(expression, message)
     } else {

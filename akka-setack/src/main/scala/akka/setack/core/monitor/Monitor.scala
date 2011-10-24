@@ -10,12 +10,13 @@ import scala.collection.mutable.ArrayBuffer
 import scala.collection.mutable.HashSet
 import scala.collection.mutable.HashMap
 import akka.setack.core.TestMessageInvocation
+import akka.setack.core.RealMessageInvocation
 import akka.setack.core.MessageEventEnum._
 import akka.actor.LocalActorRef
 
 abstract class MonitorActorMessage
-case class AsyncMessageEvent(message: MessageInvocation, event: MessageEventType) extends MonitorActorMessage
-case class ReplyMessageEvent(message: MessageInvocation) extends MonitorActorMessage
+case class AsyncMessageEvent(message: RealMessageInvocation, event: MessageEventType) extends MonitorActorMessage
+case class ReplyMessageEvent(message: RealMessageInvocation) extends MonitorActorMessage
 case class MatchedMessageEventCount(testMessage: TestMessageInvocation, event: MessageEventType) extends MonitorActorMessage
 case class AddTestMessage(testMessage: TestMessageInvocation) extends MonitorActorMessage
 case object AllDeliveredMessagesAreProcessed extends MonitorActorMessage
@@ -71,8 +72,8 @@ object Monitor {
 class TraceMonitorActor(definedTestMessages: HashSet[TestMessageInvocation]) extends Actor {
 
   var testMessagesInfo = new HashMap[TestMessageInvocation, Array[Int]]()
-  var deliveredAsyncMessages = new ArrayBuffer[MessageInvocation]()
-  var messageTrace = new ListBuffer[MessageInvocation]
+  var deliveredAsyncMessages = new ArrayBuffer[RealMessageInvocation]()
+  var messageTrace = new ListBuffer[TestMessageInvocation]
 
   override def preStart() {
     for (testMessage ← definedTestMessages) {
@@ -96,12 +97,10 @@ class TraceMonitorActor(definedTestMessages: HashSet[TestMessageInvocation]) ext
             }
             case Processed ⇒ {
               testMessagesInfo.update(testMsg, Array(dp(0), dp(1) + 1))
-              val index = deliveredAsyncMessages.indexOf(message)
+              val index = deliveredAsyncMessages.indexWhere(m ⇒ m == message)
               if (index >= 0) deliveredAsyncMessages.remove(index)
-              //if (message.message.equals("Reply")) println("reply" + index + " " + testMessagesInfo(testMsg)(1))
-              //processedAsyncMessages.+=(message)
-              //println("received processing: " + message.message + " " + message.receiver)
-              //println(processedMessages.size)
+              if (message.message.equals("Reply")) log("reply" + index + " " + testMessagesInfo(testMsg)(1))
+              log("received processing: " + message.message + " " + message.receiver)
             }
 
           }
@@ -127,14 +126,13 @@ class TraceMonitorActor(definedTestMessages: HashSet[TestMessageInvocation]) ext
           }
         }
       }
-      case AllDeliveredMessagesAreProcessed ⇒ self.reply(deliveredAsyncMessages.length == 0)
+      case AllDeliveredMessagesAreProcessed ⇒ self.reply(deliveredAsyncMessages.size == 0)
       case NotProcessedMessages             ⇒ self.reply(deliveredAsyncMessages)
 
     }
 
-  private def log(logMsg: String) {
-    //println(logMsg)
-
-  }
+  //for debugging only
+  private var debug = false
+  private def log(s: String) = if (debug) println(s)
 
 }

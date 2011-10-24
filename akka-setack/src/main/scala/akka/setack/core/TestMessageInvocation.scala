@@ -4,6 +4,18 @@
 package akka.setack.core
 import akka.dispatch.MessageInvocation
 import scala.collection.mutable.ListBuffer
+import akka.actor.UntypedChannel
+import akka.setack.util.TestActorRefFactory
+
+class RealMessageInvocation(_reciever: UntypedChannel, _message: Any, _sender: UntypedChannel) {
+  def receiver = _reciever
+  def message = _message
+  def sender = _sender
+
+  def ==(otherInvocation: RealMessageInvocation): Boolean = {
+    (receiver == otherInvocation.receiver) && (sender == otherInvocation.sender) && (message == otherInvocation.message)
+  }
+}
 
 /**
  * This enumeration defines two different kinds of the events for the
@@ -30,24 +42,24 @@ object MessageEventEnum extends Enumeration {
  */
 class TestMessageInvocation extends TestMessageInvocationSequence {
 
-  var _sender: TestActorRef = null
-  var _receiver: TestActorRef = null
+  var _receiver: UntypedChannel = null
+  var _sender: UntypedChannel = null
   var _message: Any = null
   var _messagePattern: PartialFunction[Any, Any] = null
 
-  private def this(sender: TestActorRef, receiver: TestActorRef) {
+  private def this(sender: UntypedChannel, receiver: UntypedChannel) {
     this()
     this._sender = sender
     this._receiver = receiver
     _messageSequence.+=(this)
   }
 
-  def this(sender: TestActorRef, receiver: TestActorRef, message: Any) {
+  def this(sender: UntypedChannel, receiver: UntypedChannel, message: Any) {
     this(sender, receiver)
     this._message = message
   }
 
-  def this(sender: TestActorRef, receiver: TestActorRef, messagePattern: PartialFunction[Any, Any]) {
+  def this(sender: UntypedChannel, receiver: UntypedChannel, messagePattern: PartialFunction[Any, Any]) {
     this(sender, receiver)
     this._messagePattern = messagePattern
   }
@@ -60,12 +72,11 @@ class TestMessageInvocation extends TestMessageInvocationSequence {
 
   def messagePattern = _messagePattern
 
-  def matchWithRealInvocation(realInvocation: MessageInvocation): Boolean = {
+  def matchWithRealInvocation(realInvocation: RealMessageInvocation): Boolean = {
     log("matching " + this.toString() + " " + realInvocation.toString())
+    if (!compareChannels(this.sender, realInvocation.sender)) return false
 
-    if (!this.receiver.matchesWith(realInvocation.receiver)) { log("receiver false"); return false }
-
-    if (!this.sender.matchesWith(realInvocation.channel)) { log("sender fasle" + realInvocation.channel); return false }
+    if (!compareChannels(this.receiver, realInvocation.receiver)) return false
 
     if (this.message != null && !realInvocation.message.equals(this.message)) { log("message false"); return false }
 
@@ -75,12 +86,17 @@ class TestMessageInvocation extends TestMessageInvocationSequence {
     return true
   }
 
-  override def toString(): String = {
-    var outString = "(" + sender.toString() + "," + receiver.toString() + ","
-    if (message != null) outString += message.toString()
-    else outString += messagePattern.toString()
-    return outString + ")"
+  private def compareChannels(ch1: UntypedChannel, ch2: UntypedChannel): Boolean = {
+    (ch1.isInstanceOf[TestActorRef] && ch1 == TestActorRefFactory.anyActorRef) ||
+      (ch2.isInstanceOf[TestActorRef] && ch2 == TestActorRefFactory.anyActorRef) ||
+      (ch1 == ch2)
   }
+
+  override def toString(): String = "(" + sender + "," + receiver + "," + (if (message != null) message else messagePattern) + ")"
+
+  //only for debugging
+  private var debug = false
+  private def log(s: String) = if (debug) println(s)
 
 }
 
@@ -99,11 +115,7 @@ class TestMessageInvocationSequence {
     return this
   }
 
-  def head: TestMessageInvocation = {
-    if (!_messageSequence.isEmpty)
-      _messageSequence.head
-    else return null
-  }
+  def head: TestMessageInvocation = _messageSequence.headOption.orNull
 
   def removeHead: Boolean = {
     if (!_messageSequence.isEmpty) {
@@ -119,12 +131,15 @@ class TestMessageInvocationSequence {
     return _messageSequence.isEmpty
   }
 
-  def indexOf(invocation: MessageInvocation): Int = {
+  def indexOf(invocation: RealMessageInvocation): Int = {
     return _messageSequence.findIndexOf(m ⇒ m.matchWithRealInvocation(invocation))
   }
 
-  def log(str: String) {
-    //println(str)
+  def equals(otherSequence: TestMessageInvocationSequence): Boolean = {
+    for (msg ← _messageSequence) {
+      if (!otherSequence.head.equals(msg)) return false
+    }
+    return true
   }
 
 }

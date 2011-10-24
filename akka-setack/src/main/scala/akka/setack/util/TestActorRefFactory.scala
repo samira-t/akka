@@ -18,7 +18,6 @@ import akka.actor.Address
 import akka.actor.ActorRef
 import akka.actor.Deployer
 import akka.actor.DeploymentConfig._
-import akka.setack.core.dispatcher.TestDispatcher
 import akka.setack.core.TestActorRef
 
 /**
@@ -76,7 +75,7 @@ class AnyActor extends Actor {
  * The factory methods in Actor object should be replaced with the factory methods in this
  * object. It returns a TestActorRef as the reference instead of ActroRef
  */
-object TestActorRef {
+object TestActorRefFactory {
 
   //  val provider = new TestActorRefProvider
 
@@ -225,5 +224,6 @@ object TestActorRef {
    */
   def actorOf(props: Props, address: String): TestActorRef =
     //provider.actorOf(props.withDispatcher(TestDispatcher), address).get
-    new TestActorRef(props.withDispatcher(TestDispatcher.testDispatcher), address)
+    //new TestActorRef(props.withDispatcher(TestDispatcher.testDispatcher), address)
+    new TestActorRef(props, address)
 }

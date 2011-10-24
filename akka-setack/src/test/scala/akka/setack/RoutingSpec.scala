@@ -9,8 +9,8 @@ import akka.actor.{ ActorRef, Actor }
 import collection.mutable.LinkedList
 import akka.routing.Routing.Broadcast
 import java.util.concurrent.{ CountDownLatch, TimeUnit }
-import akka.setack.util.TestActorRef._
-import akka.setack.util.TestMessage._
+import akka.setack.util.TestActorRefFactory._
+import akka.setack.util.TestMessageUtil._
 import akka.setack.util.TestExecutionUtil._
 import akka.setack.util.Assert._
 import akka.setack.core.TestMessageInvocation

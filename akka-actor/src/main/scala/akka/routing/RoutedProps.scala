@@ -165,7 +165,7 @@ case class RoutedProps(
    *
    * Java API.
    */
-  def withRouter(f: RouterFactory): RoutedProps = copy(routerFactory = () ⇒ f.newRouter())
+  //def withRouter(f: RouterFactory): RoutedProps = copy(routerFactory = () ⇒ f.newRouter())
 
   /**
    *

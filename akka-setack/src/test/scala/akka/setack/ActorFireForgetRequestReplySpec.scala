@@ -19,8 +19,8 @@ import akka.dispatch.Dispatchers
 import akka.actor.ActorRef
 import akka.actor.Props
 
-import akka.setack.util.TestActorRef._
-import akka.setack.util.TestMessage._
+import akka.setack.util.TestActorRefFactory._
+import akka.setack.util.TestMessageUtil._
 import akka.setack.util.TestExecutionUtil._
 import akka.setack.util.Assert._
 import akka.setack.core.TestMessageInvocation
@@ -90,7 +90,7 @@ class ActorFireForgetRequestReplySpec extends SetackWordSpec with MustMatchers {
       //state.s must be("Reply")
 
       /* Added by Setack*/
-     whenStable {
+      whenStable {
         isProcessed(replyMsg) must be(true)
       }
     }

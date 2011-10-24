@@ -9,8 +9,7 @@ import akka.setack.core.monitor._
 import akka.setack.core.TestMessageInvocation
 import akka.actor.UntypedChannel
 import akka.setack.core.TestMessageInvocationSequence
-import akka.setack.core.dispatcher.TestDispatcher
-import akka.setack.core.dispatcher.TestSchedule
+import akka.setack.core.TestSchedule
 import scala.collection.mutable.HashSet
 import akka.setack.core.MessageEventEnum
 import scala.collection.mutable.ArrayBuffer
@@ -18,7 +17,7 @@ import scala.collection.mutable.ArrayBuffer
 /**
  * @author <a href="http://www.cs.illinois.edu/homes/tasharo1">Samira Tasharofi</a>
  */
-object TestMessage {
+object TestMessageUtil {
 
   /**
    * Factories for creating test message invocations
@@ -33,13 +32,13 @@ object TestMessage {
   def testMessage(sender: TestActorRef, receiver: TestActorRef, message: Any): TestMessageInvocation = {
     var msg = new TestMessageInvocation(sender, receiver, message)
     Monitor.addTestMessage(msg)
-    return msg
+    msg
   }
 
   def testMessagePattern(sender: TestActorRef, receiver: TestActorRef, messagePattern: PartialFunction[Any, Any]): TestMessageInvocation = {
     var msg = new TestMessageInvocation(sender, receiver, messagePattern)
     Monitor.addTestMessage(msg)
-    return msg
+    msg
   }
 
   val anyMessage = new Object()
@@ -48,36 +47,28 @@ object TestMessage {
    * Checks if the message is delivered or not by asking from trace monitor actor.
    */
   def isDelivered(testMessage: TestMessageInvocation): Boolean = {
-    val matchedMessages = Monitor.traceMonitorActor ? MatchedMessageEventCount(testMessage, MessageEventEnum.Delivered)
-    val count = matchedMessages.get.asInstanceOf[Int]
-    //println("delivery count " + testMessage.toString() + " =" + count)
-    return count > 0
+    (Monitor.traceMonitorActor ? MatchedMessageEventCount(testMessage, MessageEventEnum.Delivered)).mapTo[Int].get > 0
   }
 
   /**
    * @return the number of the test messages delivered.
    */
   def deliveryCount(testMessage: TestMessageInvocation): Int = {
-    val matchedMessages = Monitor.traceMonitorActor ? MatchedMessageEventCount(testMessage, MessageEventEnum.Delivered)
-    return matchedMessages.get.asInstanceOf[Int]
+    (Monitor.traceMonitorActor ? MatchedMessageEventCount(testMessage, MessageEventEnum.Delivered)).mapTo[Int].get
   }
 
   /**
    * Checks if the message is processed by asking from trace monitor actor.
    */
   def isProcessed(testMessage: TestMessageInvocation): Boolean = {
-    val matchedMessages = Monitor.traceMonitorActor ? MatchedMessageEventCount(testMessage, MessageEventEnum.Processed)
-    val count = matchedMessages.get.asInstanceOf[Int]
-    //println("process count " + testMessage.toString() + " =" + count)
-    return count > 0
+    (Monitor.traceMonitorActor ? MatchedMessageEventCount(testMessage, MessageEventEnum.Processed)).mapTo[Int].get > 0
   }
 
   /**
    * @return the number of the test messages processed.
    */
   def processingCount(testMessage: TestMessageInvocation): Int = {
-    val matchedMessages = Monitor.traceMonitorActor ? MatchedMessageEventCount(testMessage, MessageEventEnum.Processed)
-    return matchedMessages.get.asInstanceOf[Int]
+    (Monitor.traceMonitorActor ? MatchedMessageEventCount(testMessage, MessageEventEnum.Processed)).mapTo[Int].get
   }
 
 }

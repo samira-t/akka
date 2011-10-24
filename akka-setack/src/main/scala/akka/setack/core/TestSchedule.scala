@@ -1,12 +1,12 @@
 /**
  * Copyright (C) 2009-2011 Typesafe Inc. <http://www.typesafe.com>
  */
-package akka.setack.core.dispatcher
+package akka.setack.core
 
 import scala.collection.mutable.HashSet
-import akka.dispatch.MessageInvocation
 import scala.collection.mutable.ListBuffer
 import akka.setack.core.TestMessageInvocationSequence
+import akka.setack.core.RealMessageInvocation
 
 /**
  * The schedule is a set of partial orders between the
@@ -24,6 +24,10 @@ class TestSchedule {
       testMessageInvocationSequences.+=(testMessageInvocationSequence)
   }
 
+  def addPartialOrder(po: TestMessageInvocationSequence) = synchronized {
+    testMessageInvocationSequences.+=(po)
+  }
+
   /**
    * @return The least index of the message among all the sequences.
    * There are multiple cases for the returned index:
@@ -32,7 +36,7 @@ class TestSchedule {
    * 3) the index is -1: the message can be delivered without any constraints
    * (the message is not matched with any messages in the partial orders)
    */
-  def leastIndexOf(messageInvocation: MessageInvocation): Int = synchronized {
+  def leastIndexOf(messageInvocation: RealMessageInvocation): Int = synchronized {
     var leastIndex = -1
     for (testMessageInvocationSequence ← testMessageInvocationSequences) {
       val currIndex = testMessageInvocationSequence.indexOf(messageInvocation)
@@ -50,7 +54,7 @@ class TestSchedule {
    * of partial orders in the schedule (move forward the pointer for the current
    * schedule).
    */
-  def removeFromHead(messageInvocation: MessageInvocation): Boolean = synchronized {
+  def removeFromHead(messageInvocation: RealMessageInvocation): Boolean = synchronized {
     for (testMessageInvocationSequence ← testMessageInvocationSequences) {
       if (testMessageInvocationSequence.head != null &&
         testMessageInvocationSequence.head.matchWithRealInvocation(messageInvocation)) {

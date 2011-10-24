@@ -1,7 +1,7 @@
 
-package akka.setack
+package akka.setack.util
 
-object TestSettings {
-  def maxTryForStability = 10
+object TestConfig {
+  val maxTryForStability = 10
 
 }
