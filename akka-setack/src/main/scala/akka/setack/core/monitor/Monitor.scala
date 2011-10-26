@@ -25,8 +25,8 @@ case object NotProcessedMessages extends MonitorActorMessage
 /**
  * This object manages the monitoring of the test execution.
  * It contains the set of test message invocations defined by the user
- * and an actor that uses this set to receive the messages sent by TestActorRef and
- * TestDispatcher regarding to delivery and processing of the messages.
+ * and an actor that uses this set to receive the messages sent by TestActorRef
+ * regarding to delivery and processing of the messages.
  * For the efficiency, the actor just keeps track of the messages that match
  * with the user defined test messages.
  *
@@ -115,7 +115,7 @@ class TraceMonitorActor(definedTestMessages: HashSet[TestMessageInvocation]) ext
 
       }
       /**
-       * returns the set of the real  messages that are matched with the test message and specified event
+       * returns the set of the real  messages that are matched with the test message and the specified event
        */
       case MatchedMessageEventCount(testMessage, event) ⇒ {
         event match {

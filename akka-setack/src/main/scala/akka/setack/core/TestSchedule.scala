@@ -5,14 +5,13 @@ package akka.setack.core
 
 import scala.collection.mutable.HashSet
 import scala.collection.mutable.ListBuffer
-import akka.setack.core.TestMessageInvocationSequence
-import akka.setack.core.RealMessageInvocation
 
 /**
- * The schedule is a set of partial orders between the
+ * The schedule is a set of partial orders between the test messages.
+ * This class is synchronized to make it thread-safe.
  *
  * @author <a href="http://www.cs.illinois.edu/homes/tasharo1">Samira Tasharofi</a>
- * test message invocations (test message invocation sequence).
+ *
  */
 class TestSchedule {
 
@@ -78,7 +77,7 @@ class TestSchedule {
       outString += sequnece.messageSequence.mkString("->")
       outString += ", "
     }
-    return outString
+    outString
   }
 
 }

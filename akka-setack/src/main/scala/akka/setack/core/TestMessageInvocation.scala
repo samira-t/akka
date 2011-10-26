@@ -12,9 +12,8 @@ class RealMessageInvocation(_reciever: UntypedChannel, _message: Any, _sender: U
   def message = _message
   def sender = _sender
 
-  def ==(otherInvocation: RealMessageInvocation): Boolean = {
+  def ==(otherInvocation: RealMessageInvocation): Boolean =
     (receiver == otherInvocation.receiver) && (sender == otherInvocation.sender) && (message == otherInvocation.message)
-  }
 }
 
 /**
@@ -36,7 +35,7 @@ object MessageEventEnum extends Enumeration {
  * The message property in the test message invocation
  * can be an object or a pattern (partial function)
  *
- * The wild card for the sender and receiver is an instance of AnyActorRef, anyActorRef
+ * The wild card for the sender and receiver is anyActorRef
  *
  * @author <a href="http://www.cs.illinois.edu/homes/tasharo1">Samira Tasharofi</a>
  */
@@ -78,10 +77,9 @@ class TestMessageInvocation extends TestMessageInvocationSequence {
 
     if (!compareChannels(this.receiver, realInvocation.receiver)) return false
 
-    if (this.message != null && !realInvocation.message.equals(this.message)) { log("message false"); return false }
+    if (this.message != null && realInvocation.message != this.message) { log("message false"); return false }
 
-    if (this.messagePattern != null && !this.messagePattern.isDefinedAt(realInvocation.message))
-      return false
+    if (this.messagePattern != null && !this.messagePattern.isDefinedAt(realInvocation.message)) return false
     log(" returns true")
     return true
   }
@@ -103,6 +101,7 @@ class TestMessageInvocation extends TestMessageInvocationSequence {
 /**
  * Each test message invocation sequence is an ordered set of test message
  * invocations. The sequence is defined by using '->' operator.
+ * The assumption is that the sender of all messages in a given sequence are the same.
  *
  * @author <a href="http://www.cs.illinois.edu/homes/tasharo1">Samira Tasharofi</a>
  */

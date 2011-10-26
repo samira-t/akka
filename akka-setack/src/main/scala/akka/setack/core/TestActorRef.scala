@@ -28,7 +28,8 @@ class TestActorRef(props: Props, address: String) extends LocalActorRef( /*props
   private var _cloudMessages = new HashSet[RealMessageInvocation]()
 
   /**
-   * A set of partial orders between the messages. It is used to romve some nondeterminism from the execution
+   * A set of partial orders between the messages. It is used to remove some nondeterminism from the execution.
+   * TestSchedule is synchronized.
    */
   private var _currentSchedule: TestSchedule = null
 
@@ -70,9 +71,7 @@ class TestActorRef(props: Props, address: String) extends LocalActorRef( /*props
    * @return reference to the actor object, where the static type matches the factory used inside the
    * constructor. This reference is discarded upon restarting the actor
    */
-  def actorObject[T <: Actor]: T = synchronized {
-    actorInstance.asInstanceOf[AtomicReference[T]].get
-  }
+  def actorObject[T <: Actor]: T = actorInstance.asInstanceOf[AtomicReference[T]].get
 
   /**
    * Overrides the postMessageToMailbox to apply the constraints in the schedule if there is any

@@ -10,6 +10,7 @@ import monitor.AllDeliveredMessagesAreProcessed
 import akka.actor.LocalActorRef
 import scala.collection.mutable.HashSet
 import scala.collection.mutable.ArrayBuffer
+import akka.setack.TestConfig
 
 /**
  * @author <a href="http://www.cs.illinois.edu/homes/tasharo1">Samira Tasharofi</a>
@@ -40,17 +41,19 @@ object TestExecutionManager {
    *
    *
    */
-  def checkForStability(maxTry: Int = 10): Boolean =
+  def checkForStability(maxTry: Int = TestConfig.maxTryForStability): Boolean =
     {
       var triedCheck = 0
       var isStable = false
+      var notProcessedMessages = new ArrayBuffer[RealMessageInvocation]()
 
       while (triedCheck < maxTry && !isStable) {
-        Thread.sleep(100)
         triedCheck += 1
+        Thread.sleep(TestConfig.sleepInterval * triedCheck)
 
         isStable = true
         actorsWithMessages.clear()
+        notProcessedMessages.clear()
 
         for (a ← Actor.registry.local) {
 
@@ -68,18 +71,18 @@ object TestExecutionManager {
          * have been delivered are processed.
          */
         if (isStable) {
-          if (!(traceMonitorActor ? AllDeliveredMessagesAreProcessed).get.asInstanceOf[Boolean]) {
+          if (!(traceMonitorActor ? AllDeliveredMessagesAreProcessed).mapTo[Boolean].get) {
             isStable = false
             if (triedCheck == maxTry) {
-              //record the messages that are delivred but not processed yet
-              val notProcessedMessages = (traceMonitorActor ? NotProcessedMessages).mapTo[ArrayBuffer[RealMessageInvocation]].get
+              //for debugging: record the messages that are delivered but not processed yet
+              notProcessedMessages = (traceMonitorActor ? NotProcessedMessages).mapTo[ArrayBuffer[RealMessageInvocation]].get
             }
             log("not all delivered messages are processed yet")
 
           }
         }
       }
-      if (!isStable) println("no stable")
+      if (!isStable) println("no stable" + notProcessedMessages.size)
       isStable
 
     }
