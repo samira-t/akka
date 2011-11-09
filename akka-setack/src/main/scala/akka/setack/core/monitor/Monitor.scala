@@ -32,9 +32,11 @@ case object NotProcessedMessages extends MonitorActorMessage
  *
  * @author <a href="http://www.cs.illinois.edu/homes/tasharo1">Samira Tasharofi</a>
  */
-object Monitor {
+class Monitor {
 
+  @volatile
   var traceMonitorActor: ActorRef = null
+
   private var definedTestMessages = new HashSet[TestMessageInvocation]
 
   /**

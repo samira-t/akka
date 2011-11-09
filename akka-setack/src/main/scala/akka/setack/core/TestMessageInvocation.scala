@@ -5,7 +5,7 @@ package akka.setack.core
 import akka.dispatch.MessageInvocation
 import scala.collection.mutable.ListBuffer
 import akka.actor.UntypedChannel
-import akka.setack.util.TestActorRefFactory
+import akka.setack.Commons._
 
 class RealMessageInvocation(_reciever: UntypedChannel, _message: Any, _sender: UntypedChannel) {
   def receiver = _reciever
@@ -77,7 +77,7 @@ class TestMessageInvocation extends TestMessageInvocationSequence {
 
     if (!compareChannels(this.receiver, realInvocation.receiver)) return false
 
-    if (this.message != null && realInvocation.message != this.message) { log("message false"); return false }
+    if (this.message != null && this.message != anyMessage && this.message != realInvocation.message) return false
 
     if (this.messagePattern != null && !this.messagePattern.isDefinedAt(realInvocation.message)) return false
     log(" returns true")
@@ -85,9 +85,7 @@ class TestMessageInvocation extends TestMessageInvocationSequence {
   }
 
   private def compareChannels(ch1: UntypedChannel, ch2: UntypedChannel): Boolean = {
-    (ch1.isInstanceOf[TestActorRef] && ch1 == TestActorRefFactory.anyActorRef) ||
-      (ch2.isInstanceOf[TestActorRef] && ch2 == TestActorRefFactory.anyActorRef) ||
-      (ch1 == ch2)
+    (ch1 == anyActorRef) || (ch2 == anyActorRef) || (ch1 == ch2)
   }
 
   override def toString(): String = "(" + sender + "," + receiver + "," + (if (message != null) message else messagePattern) + ")"

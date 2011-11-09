@@ -9,13 +9,10 @@ import akka.actor.{ ActorRef, Actor }
 import collection.mutable.LinkedList
 import akka.routing.Routing.Broadcast
 import java.util.concurrent.{ CountDownLatch, TimeUnit }
-import akka.setack.util.TestActorRefFactory._
-import akka.setack.util.TestMessageUtil._
-import akka.setack.util.TestExecutionUtil._
-import akka.setack.util.Assert._
 import akka.setack.core.TestMessageInvocation
 import akka.setack.core.TestActorRef
 import akka.setack.SetackWordSpec
+import akka.setack.Commons._
 
 object RoutingSpec {
 
@@ -229,7 +226,7 @@ class RoutingSpec extends SetackWordSpec with MustMatchers {
         }
       })
 
-      /* Added by Setack */
+      //Added by Setack 
       val end = testMessage(anyActorRef, connection1, "end")
       val int1 = testMessage(anyActorRef, connection1, 1)
 
@@ -246,7 +243,7 @@ class RoutingSpec extends SetackWordSpec with MustMatchers {
       //doneLatch.await(5, TimeUnit.SECONDS) must be(true)
       //counter1.get must be(0)
 
-      /* Added by Setack */
+      //Added by Setack 
       whenStable {
         processingCount(end) must be(1)
         deliveryCount(int1) must be(0)
@@ -296,7 +293,7 @@ class RoutingSpec extends SetackWordSpec with MustMatchers {
         }
       })
 
-      /* Added by Setack */
+      //Added by Setack 
       val int1 = testMessage(anyActorRef, connection1, 1)
       val end1 = testMessage(anyActorRef, connection1, "end")
       val int2 = testMessage(anyActorRef, connection2, 1)
@@ -312,7 +309,7 @@ class RoutingSpec extends SetackWordSpec with MustMatchers {
       //counter1.get must be(1)
       //counter2.get must be(1)
 
-      /* Added by Setack */
+      //Added by Setack 
       whenStable {
         isProcessed(end1) must be(true)
         processingCount(int1) must be(1)
@@ -332,7 +329,7 @@ class RoutingSpec extends SetackWordSpec with MustMatchers {
         }
       })
 
-      /* Added by Setack */
+      //Added by Setack 
       val int = testMessage(anyActorRef, connection1, 1)
 
       val actor = Routing.actorOf("foo", List(connection1), RouterType.Random)
@@ -348,7 +345,7 @@ class RoutingSpec extends SetackWordSpec with MustMatchers {
       //doneLatch.await(5, TimeUnit.SECONDS) must be(true)
       //counter1.get must be(0)
 
-      /* Added by Setack */
+      //Added by Setack 
       whenStable {
         isProcessed(int) must be(false)
       }

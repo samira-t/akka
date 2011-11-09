@@ -7,13 +7,8 @@ package akka.setack.test
 import org.scalatest.WordSpec
 import org.scalatest.matchers.MustMatchers
 
-import akka.setack.util.TestActorRefFactory._
-import akka.setack.util.TestMessageUtil._
-import akka.setack.util.TestExecutionUtil._
-import akka.setack.util.Assert._
-import akka.setack.core.TestMessageInvocation
-import akka.setack.core.TestActorRef
 import akka.setack.SetackWordSpec
+import akka.setack.Commons._
 
 //import akka.testkit._
 

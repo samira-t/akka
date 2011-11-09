@@ -19,21 +19,11 @@ import akka.actor.ActorRef
 import akka.actor.Deployer
 import akka.actor.DeploymentConfig._
 import akka.setack.core.TestActorRef
+import akka.setack.core.monitor.Monitor
 
 /**
  * @author <a href="http://www.cs.illinois.edu/homes/tasharo1">Samira Tasharofi</a>
  */
-
-/**
- * This actor is an actor whose instances can be matched with
- * any other actors.
- * It is a wild card for matching
- */
-class AnyActor extends Actor {
-  def receive = {
-    case _ ⇒
-  }
-}
 
 /**
  * Local ActorRef provider.
@@ -75,14 +65,14 @@ class AnyActor extends Actor {
  * The factory methods in Actor object should be replaced with the factory methods in this
  * object. It returns a TestActorRef as the reference instead of ActroRef
  */
-object TestActorRefFactory {
+class TestActorRefFactory(monitor: Monitor) {
 
   //  val provider = new TestActorRefProvider
 
   /**
    * an instance of AnyActor for using as a wild card
    */
-  val anyActorRef = actorOf[AnyActor]
+  //val anyActorRef = actorOf[AnyActor]
 
   /**
    *  Creates an ActorRef out of the Actor with type T.
@@ -225,5 +215,5 @@ object TestActorRefFactory {
   def actorOf(props: Props, address: String): TestActorRef =
     //provider.actorOf(props.withDispatcher(TestDispatcher), address).get
     //new TestActorRef(props.withDispatcher(TestDispatcher.testDispatcher), address)
-    new TestActorRef(props, address)
+    new TestActorRef(props, address, monitor)
 }

@@ -19,13 +19,8 @@ import akka.dispatch.Dispatchers
 import akka.actor.ActorRef
 import akka.actor.Props
 
-import akka.setack.util.TestActorRefFactory._
-import akka.setack.util.TestMessageUtil._
-import akka.setack.util.TestExecutionUtil._
-import akka.setack.util.Assert._
-import akka.setack.core.TestMessageInvocation
-import akka.setack.core.TestActorRef
 import akka.setack.SetackWordSpec
+import akka.setack.Commons._
 
 object ActorFireForgetRequestReplySpec {
 
@@ -70,7 +65,6 @@ object ActorFireForgetRequestReplySpec {
 
 class ActorFireForgetRequestReplySpec extends SetackWordSpec with MustMatchers { //with BeforeAndAfterEach {
   import ActorFireForgetRequestReplySpec._
-
   //  override def beforeEach() = {
   //    state.finished.reset
   //  }

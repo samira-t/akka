@@ -18,14 +18,14 @@ object Assert {
    * Waits for the system to get stable and then checks the expression. Throws exception
    * if the system does not get stable after maximum try.
    */
-  def assertWhenStable(expression: ⇒ Boolean, message: String = "") {
-    val isStable = TestExecutionManager.checkForStability()
-    if (isStable) {
-      assert(expression, message)
-    } else {
-      throw new Exception("the system did not get stable with the specified timeout")
-    }
-  }
+  //  def assertWhenStable(expression: ⇒ Boolean, message: String = "") {
+  //    val isStable = TestExecutionManager.checkForStability()
+  //    if (isStable) {
+  //      assert(expression, message)
+  //    } else {
+  //      throw new Exception("the system did not get stable with the specified timeout")
+  //    }
+  //  }
 
   /**
    * Checks the expression after some timeout defined by the user.

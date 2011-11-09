@@ -4,18 +4,18 @@
 package akka.setack.core
 import akka.actor.Actor
 import akka.actor.ActorRef
-import monitor.Monitor.traceMonitorActor
 import monitor.NotProcessedMessages
 import monitor.AllDeliveredMessagesAreProcessed
 import akka.actor.LocalActorRef
 import scala.collection.mutable.HashSet
 import scala.collection.mutable.ArrayBuffer
 import akka.setack.TestConfig
+import monitor.Monitor
 
 /**
  * @author <a href="http://www.cs.illinois.edu/homes/tasharo1">Samira Tasharofi</a>
  */
-object TestExecutionManager {
+class TestExecutionManager(monitor: Monitor) {
 
   private var actorsWithMessages = new HashSet[ActorRef]
 
@@ -23,7 +23,7 @@ object TestExecutionManager {
    * Starts the monitor actor
    */
   def startTest {
-    monitor.Monitor.startMonitoring()
+    monitor.startMonitoring()
   }
 
   /**
@@ -71,11 +71,11 @@ object TestExecutionManager {
          * have been delivered are processed.
          */
         if (isStable) {
-          if (!(traceMonitorActor ? AllDeliveredMessagesAreProcessed).mapTo[Boolean].get) {
+          if (!(monitor.traceMonitorActor ? AllDeliveredMessagesAreProcessed).mapTo[Boolean].get) {
             isStable = false
             if (triedCheck == maxTry) {
               //for debugging: record the messages that are delivered but not processed yet
-              notProcessedMessages = (traceMonitorActor ? NotProcessedMessages).mapTo[ArrayBuffer[RealMessageInvocation]].get
+              notProcessedMessages = (monitor.traceMonitorActor ? NotProcessedMessages).mapTo[ArrayBuffer[RealMessageInvocation]].get
             }
             log("not all delivered messages are processed yet")
 

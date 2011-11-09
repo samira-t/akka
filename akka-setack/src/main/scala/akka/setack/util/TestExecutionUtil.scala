@@ -12,22 +12,21 @@ import akka.actor.Actor
  * @author <a href="http://www.cs.illinois.edu/homes/tasharo1">Samira Tasharofi</a>
  */
 
-object TestExecutionUtil {
+class TestExecutionUtil(testExecutionManager: TestExecutionManager) {
 
-  def whenStable(body: ⇒ Unit)(implicit tryCount: Int = 10): Boolean = {
-    val isStable = TestExecutionManager.checkForStability(tryCount)
-    body
-    isStable
-
-  }
+  //  def whenStable(body: ⇒ Unit)(implicit tryCount: Int = 10): Boolean = {
+  //    val isStable = testExecutionManager.checkForStability(tryCount)
+  //    body
+  //    isStable
+  //
+  //  }
 
   /**
    * API for constraining the schedule of test execution and removing some non-determinism by specifying
    * a set of partial orders between the messages. The receivers of the messages in each partial order should
    * be the same (an instance of TestActorRef)
    */
-  def setSchedule(partialOrders: TestMessageInvocationSequence*) {
-    var pordersSet = partialOrders.toSet[TestMessageInvocationSequence]
+  def setSchedule(partialOrders: Set[TestMessageInvocationSequence]) {
     /*
      * TODO: check if the receivers of all messages in each partial order are the same
      */

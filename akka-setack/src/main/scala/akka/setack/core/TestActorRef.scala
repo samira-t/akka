@@ -18,7 +18,7 @@ import scala.collection.mutable.HashSet
  * @author <a href="http://www.cs.illinois.edu/homes/tasharo1">Samira Tasharofi</a>
  */
 
-class TestActorRef(props: Props, address: String) extends LocalActorRef( /*props.withDispatcher(testDispatcher)*/ props, address, false) {
+class TestActorRef(props: Props, address: String, monitor: akka.setack.core.monitor.Monitor) extends LocalActorRef( /*props.withDispatcher(testDispatcher)*/ props, address, false) {
   import MessageEventEnum._
 
   /**
@@ -40,7 +40,7 @@ class TestActorRef(props: Props, address: String) extends LocalActorRef( /*props
     try {
       super.invoke(messageHandle)
     } finally {
-      Monitor.traceMonitorActor ! AsyncMessageEvent(new RealMessageInvocation(messageHandle.receiver, messageHandle.message, messageHandle.channel), MessageEventEnum.Processed)
+      monitor.traceMonitorActor ! AsyncMessageEvent(new RealMessageInvocation(messageHandle.receiver, messageHandle.message, messageHandle.channel), MessageEventEnum.Processed)
       log("sent processing" + messageHandle.message)
 
     }
@@ -51,7 +51,7 @@ class TestActorRef(props: Props, address: String) extends LocalActorRef( /*props
    */
   override def reply(message: Any) = {
     if (channel.isInstanceOf[ActorPromise]) {
-      Monitor.traceMonitorActor ! ReplyMessageEvent(new RealMessageInvocation(channel, message, this))
+      monitor.traceMonitorActor ! ReplyMessageEvent(new RealMessageInvocation(channel, message, this))
     }
     super.reply(message)
   }
@@ -62,7 +62,7 @@ class TestActorRef(props: Props, address: String) extends LocalActorRef( /*props
    */
   override def tryReply(message: Any): Boolean = {
     if (channel.isInstanceOf[ActorPromise]) {
-      Monitor.traceMonitorActor ! ReplyMessageEvent(new RealMessageInvocation(channel, message, this))
+      monitor.traceMonitorActor ! ReplyMessageEvent(new RealMessageInvocation(channel, message, this))
     }
     super.tryTell(message)
   }
@@ -89,7 +89,7 @@ class TestActorRef(props: Props, address: String) extends LocalActorRef( /*props
    */
   private def postMessageToMailboxWithoutCheck(message: Any, channel: UntypedChannel): Unit = {
     super.postMessageToMailbox(message, channel)
-    Monitor.traceMonitorActor ! AsyncMessageEvent(new RealMessageInvocation(this, message, channel), Delivered)
+    monitor.traceMonitorActor ! AsyncMessageEvent(new RealMessageInvocation(this, message, channel), Delivered)
   }
 
   /**
@@ -137,7 +137,7 @@ class TestActorRef(props: Props, address: String) extends LocalActorRef( /*props
     timeout: Timeout,
     channel: UntypedChannel): Future[Any] = {
     val future = super.postMessageToMailboxAndCreateFutureResultWithTimeout(message, timeout, channel)
-    Monitor.traceMonitorActor ! AsyncMessageEvent(new RealMessageInvocation(this, message, future.asInstanceOf[ActorPromise]), Delivered)
+    monitor.traceMonitorActor ! AsyncMessageEvent(new RealMessageInvocation(this, message, future.asInstanceOf[ActorPromise]), Delivered)
     future
   }
 
