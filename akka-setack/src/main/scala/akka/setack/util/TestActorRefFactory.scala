@@ -19,7 +19,6 @@ import akka.actor.ActorRef
 import akka.actor.Deployer
 import akka.actor.DeploymentConfig._
 import akka.setack.core.TestActorRef
-import akka.setack.core.monitor.Monitor
 
 /**
  * @author <a href="http://www.cs.illinois.edu/homes/tasharo1">Samira Tasharofi</a>
@@ -65,7 +64,7 @@ import akka.setack.core.monitor.Monitor
  * The factory methods in Actor object should be replaced with the factory methods in this
  * object. It returns a TestActorRef as the reference instead of ActroRef
  */
-class TestActorRefFactory(monitor: Monitor) {
+class TestActorRefFactory(traceMonitorActor: ActorRef) {
 
   //  val provider = new TestActorRefProvider
 
@@ -215,5 +214,5 @@ class TestActorRefFactory(monitor: Monitor) {
   def actorOf(props: Props, address: String): TestActorRef =
     //provider.actorOf(props.withDispatcher(TestDispatcher), address).get
     //new TestActorRef(props.withDispatcher(TestDispatcher.testDispatcher), address)
-    new TestActorRef(props, address, monitor)
+    new TestActorRef(props, address, traceMonitorActor)
 }

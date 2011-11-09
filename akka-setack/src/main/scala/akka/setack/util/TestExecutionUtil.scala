@@ -12,14 +12,7 @@ import akka.actor.Actor
  * @author <a href="http://www.cs.illinois.edu/homes/tasharo1">Samira Tasharofi</a>
  */
 
-class TestExecutionUtil(testExecutionManager: TestExecutionManager) {
-
-  //  def whenStable(body: ⇒ Unit)(implicit tryCount: Int = 10): Boolean = {
-  //    val isStable = testExecutionManager.checkForStability(tryCount)
-  //    body
-  //    isStable
-  //
-  //  }
+object TestExecutionUtil {
 
   /**
    * API for constraining the schedule of test execution and removing some non-determinism by specifying
@@ -31,7 +24,10 @@ class TestExecutionUtil(testExecutionManager: TestExecutionManager) {
      * TODO: check if the receivers of all messages in each partial order are the same
      */
     for (po ← partialOrders) {
-      po.head._receiver.asInstanceOf[TestActorRef].addPartialOrderToSchedule(po)
+      if (po.head._receiver.isInstanceOf[TestActorRef]) {
+        po.head._receiver.asInstanceOf[TestActorRef].addPartialOrderToSchedule(po)
+      } else
+        throw new Exception("The receiver of the test message in a schedule should be an instance of TestActorRef")
     }
   }
 

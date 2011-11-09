@@ -21,67 +21,25 @@ case class MatchedMessageEventCount(testMessage: TestMessageInvocation, event: M
 case class AddTestMessage(testMessage: TestMessageInvocation) extends MonitorActorMessage
 case object AllDeliveredMessagesAreProcessed extends MonitorActorMessage
 case object NotProcessedMessages extends MonitorActorMessage
+case object ClearState extends MonitorActorMessage
 
 /**
- * This object manages the monitoring of the test execution.
- * It contains the set of test message invocations defined by the user
- * and an actor that uses this set to receive the messages sent by TestActorRef
- * regarding to delivery and processing of the messages.
+ * This actor manages the monitoring of the test execution.
+ * It contains the set of test messages defined by the user
+ * and uses this set to match with the messages sent/received by TestActorRef
  * For the efficiency, the actor just keeps track of the messages that match
  * with the user defined test messages.
+ * It can report which test messages delivered/processed and how many times
+ * they are delivered/processed.
  *
  * @author <a href="http://www.cs.illinois.edu/homes/tasharo1">Samira Tasharofi</a>
  */
-class Monitor {
 
-  @volatile
-  var traceMonitorActor: ActorRef = null
-
-  private var definedTestMessages = new HashSet[TestMessageInvocation]
-
-  /**
-   * This method is called by the TestMessageInvocationFactory when the user
-   * creates and defines a test message.
-   */
-  def addTestMessage(testMessageInvocation: TestMessageInvocation) {
-    definedTestMessages.add(testMessageInvocation)
-    /*
-     * If the test is already running, add the new test message to the list of the messages in the monitoring actor
-     */
-    if (traceMonitorActor != null && traceMonitorActor.isRunning) {
-      val f = (traceMonitorActor ? AddTestMessage(testMessageInvocation))
-      f.get
-    }
-  }
-
-  /**
-   * It is called before each test starts.It starts a new monitoring actor.
-   */
-  def startMonitoring() {
-    traceMonitorActor = Actor.actorOf(new TraceMonitorActor(definedTestMessages))
-  }
-
-  /**
-   * It is called after each test. It clears its local state and stops the monitoring actor
-   */
-  def stopMonitoring() {
-    traceMonitorActor.stop
-    definedTestMessages.clear()
-  }
-
-}
-
-class TraceMonitorActor(definedTestMessages: HashSet[TestMessageInvocation]) extends Actor {
+class TraceMonitorActor() extends Actor {
 
   var testMessagesInfo = new HashMap[TestMessageInvocation, Array[Int]]()
   var deliveredAsyncMessages = new ArrayBuffer[RealMessageInvocation]()
   var messageTrace = new ListBuffer[TestMessageInvocation]
-
-  override def preStart() {
-    for (testMessage ← definedTestMessages) {
-      testMessagesInfo.put(testMessage, Array(0, 0))
-    }
-  }
 
   def receive =
     {
@@ -130,6 +88,14 @@ class TraceMonitorActor(definedTestMessages: HashSet[TestMessageInvocation]) ext
       }
       case AllDeliveredMessagesAreProcessed ⇒ self.reply(deliveredAsyncMessages.size == 0)
       case NotProcessedMessages             ⇒ self.reply(deliveredAsyncMessages)
+
+      case ClearState ⇒ {
+        testMessagesInfo = new HashMap[TestMessageInvocation, Array[Int]]()
+        deliveredAsyncMessages = new ArrayBuffer[RealMessageInvocation]()
+        messageTrace = new ListBuffer[TestMessageInvocation]
+        self.reply()
+
+      }
 
     }
 

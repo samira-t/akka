@@ -10,12 +10,12 @@ import akka.actor.LocalActorRef
 import scala.collection.mutable.HashSet
 import scala.collection.mutable.ArrayBuffer
 import akka.setack.TestConfig
-import monitor.Monitor
+import monitor._
 
 /**
  * @author <a href="http://www.cs.illinois.edu/homes/tasharo1">Samira Tasharofi</a>
  */
-class TestExecutionManager(monitor: Monitor) {
+class TestExecutionManager(traceMonitorActor: ActorRef) {
 
   private var actorsWithMessages = new HashSet[ActorRef]
 
@@ -23,7 +23,6 @@ class TestExecutionManager(monitor: Monitor) {
    * Starts the monitor actor
    */
   def startTest {
-    monitor.startMonitoring()
   }
 
   /**
@@ -71,11 +70,11 @@ class TestExecutionManager(monitor: Monitor) {
          * have been delivered are processed.
          */
         if (isStable) {
-          if (!(monitor.traceMonitorActor ? AllDeliveredMessagesAreProcessed).mapTo[Boolean].get) {
+          if (!(traceMonitorActor ? AllDeliveredMessagesAreProcessed).mapTo[Boolean].get) {
             isStable = false
             if (triedCheck == maxTry) {
               //for debugging: record the messages that are delivered but not processed yet
-              notProcessedMessages = (monitor.traceMonitorActor ? NotProcessedMessages).mapTo[ArrayBuffer[RealMessageInvocation]].get
+              notProcessedMessages = (traceMonitorActor ? NotProcessedMessages).mapTo[ArrayBuffer[RealMessageInvocation]].get
             }
             log("not all delivered messages are processed yet")
 
@@ -92,21 +91,27 @@ class TestExecutionManager(monitor: Monitor) {
    */
   def stopTest {
     log("stability for stopping the test")
+    // with a timeout, waits for the system to get stable 
     val stable = checkForStability()
 
-    /*
-     *  remove the actors that has not finished processing their messages
+    //Reset the current state of the traceMonitorActor to prepare it for the next test in the test case.
+    (traceMonitorActor ? ClearState).get
+
+    //Stop other actors
+    for (actor ← Actor.registry.local) {
+
+      /*
+     *  removes the actors that has not finished processing their messages
      *  from registry to prepare the registry for the next test. 
      *  These actors might be in an infinite loop and cannot be stopped 
      */
-    for (actor ← actorsWithMessages) {
-      log("unregister" + actor)
-      Actor.registry.unregister(actor)
-      log(actor + " has not finished processing its messages")
+      if (actorsWithMessages.contains(actor)) {
+        log("unregister" + actor)
+        Actor.registry.unregister(actor)
+        log(actor + " has not finished processing its messages")
+      } else if (actor != traceMonitorActor) // stop other actors except the traceMonitorActor
+        actor.stop
     }
-
-    // stop other actors
-    Actor.registry.local.shutdownAll
 
   }
 

@@ -23,6 +23,7 @@ case class Produce(values: List[Int]) extends ProducerMessage
 
 abstract class ConsumerMessage
 case class Consume(count: Int) extends ConsumerMessage
+case object GetToken extends ConsumerMessage
 
 class BoundedBuffer(size: Int) extends Actor {
 
@@ -71,9 +72,10 @@ class Consumer(buf: ActorRef) extends Actor {
     case Consume(count) ⇒ {
       for (i ← 1 to count) {
         token = (buf ? Get).get.asInstanceOf[Int]
-        //println(token)
+        //println("consumer = " + token)
       }
     }
+    case GetToken ⇒ self.reply(token)
   }
 }
 
@@ -114,8 +116,7 @@ class TestBoundedBuffer extends SetackJUnit with org.scalatest.junit.JUnitSuite 
     consumer ! Consume(1)
     // Phase1
     whenStable {
-      println(consumer.actorObject[Consumer].token)
-      assert(consumer.actorObject[Consumer].token == 1)
+      assert((consumer ? GetToken).mapTo[Int].get == 1)
     }
 
     //Phase 2
@@ -124,8 +125,9 @@ class TestBoundedBuffer extends SetackJUnit with org.scalatest.junit.JUnitSuite 
     consumer ! Consume(1)
 
     whenStable {
-      //println(consumer.actorObject[Consumer].token)
-      assert(consumer.actorObject[Consumer].token == 3)
+      //val token = (consumer ? GetToken).mapTo[Int].get
+      //println(token)
+      assert((consumer ? GetToken).mapTo[Int].get == 3)
     }
   }
 
@@ -137,7 +139,7 @@ class TestBoundedBuffer extends SetackJUnit with org.scalatest.junit.JUnitSuite 
 
     // Phase1
     whenStable {
-      assert(consumer.actorObject[Consumer].token == -2)
+      assert((consumer ? GetToken).mapTo[Int].get == -2)
     }
   }
 

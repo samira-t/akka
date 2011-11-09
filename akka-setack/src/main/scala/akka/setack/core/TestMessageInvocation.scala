@@ -7,7 +7,7 @@ import scala.collection.mutable.ListBuffer
 import akka.actor.UntypedChannel
 import akka.setack.Commons._
 
-class RealMessageInvocation(_reciever: UntypedChannel, _message: Any, _sender: UntypedChannel) {
+case class RealMessageInvocation(_reciever: UntypedChannel, _message: Any, _sender: UntypedChannel) {
   def receiver = _reciever
   def message = _message
   def sender = _sender
@@ -35,11 +35,12 @@ object MessageEventEnum extends Enumeration {
  * The message property in the test message invocation
  * can be an object or a pattern (partial function)
  *
- * The wild card for the sender and receiver is anyActorRef
+ * The wild card for the sender and receiver is anyActorRef.
+ * The wild card for the message is anyMessage.
  *
  * @author <a href="http://www.cs.illinois.edu/homes/tasharo1">Samira Tasharofi</a>
  */
-class TestMessageInvocation extends TestMessageInvocationSequence {
+class TestMessageInvocation {
 
   var _receiver: UntypedChannel = null
   var _sender: UntypedChannel = null
@@ -50,7 +51,6 @@ class TestMessageInvocation extends TestMessageInvocationSequence {
     this()
     this._sender = sender
     this._receiver = receiver
-    _messageSequence.+=(this)
   }
 
   def this(sender: UntypedChannel, receiver: UntypedChannel, message: Any) {
@@ -88,6 +88,14 @@ class TestMessageInvocation extends TestMessageInvocationSequence {
     (ch1 == anyActorRef) || (ch2 == anyActorRef) || (ch1 == ch2)
   }
 
+  /**
+   * This operator can be applied to test messages to create a sequence(order) of the test messages which can be used for
+   * deterministic execution via "setScheudle" API.
+   */
+  def ->(testMessage: TestMessageInvocation): TestMessageInvocationSequence = {
+    return (new TestMessageInvocationSequence(this) -> testMessage)
+  }
+
   override def toString(): String = "(" + sender + "," + receiver + "," + (if (message != null) message else messagePattern) + ")"
 
   //only for debugging
@@ -103,9 +111,9 @@ class TestMessageInvocation extends TestMessageInvocationSequence {
  *
  * @author <a href="http://www.cs.illinois.edu/homes/tasharo1">Samira Tasharofi</a>
  */
-class TestMessageInvocationSequence {
+class TestMessageInvocationSequence(testMessage: TestMessageInvocation) {
 
-  protected var _messageSequence = new ListBuffer[TestMessageInvocation]
+  protected var _messageSequence = ListBuffer[TestMessageInvocation](testMessage)
 
   def ->(testMessage: TestMessageInvocation): TestMessageInvocationSequence = {
     _messageSequence.+=(testMessage)

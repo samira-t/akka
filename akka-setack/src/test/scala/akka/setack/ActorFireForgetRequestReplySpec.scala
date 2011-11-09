@@ -119,7 +119,7 @@ class ActorFireForgetRequestReplySpec extends SetackWordSpec with MustMatchers {
       //state.finished.await
       //sleepFor(1 second)
 
-      whenStable {
+      after(1000) {
         actor.isShutdown must be(true)
       }
       //}

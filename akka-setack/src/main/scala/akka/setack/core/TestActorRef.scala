@@ -18,7 +18,7 @@ import scala.collection.mutable.HashSet
  * @author <a href="http://www.cs.illinois.edu/homes/tasharo1">Samira Tasharofi</a>
  */
 
-class TestActorRef(props: Props, address: String, monitor: akka.setack.core.monitor.Monitor) extends LocalActorRef( /*props.withDispatcher(testDispatcher)*/ props, address, false) {
+class TestActorRef(props: Props, address: String, traceMonitorActor: ActorRef) extends LocalActorRef( /*props.withDispatcher(testDispatcher)*/ props, address, false) {
   import MessageEventEnum._
 
   /**
@@ -29,8 +29,9 @@ class TestActorRef(props: Props, address: String, monitor: akka.setack.core.moni
 
   /**
    * A set of partial orders between the messages. It is used to remove some nondeterminism from the execution.
-   * TestSchedule is synchronized.
+   * TestSchedule is thread-safe.
    */
+  @volatile
   private var _currentSchedule: TestSchedule = null
 
   /**
@@ -40,7 +41,7 @@ class TestActorRef(props: Props, address: String, monitor: akka.setack.core.moni
     try {
       super.invoke(messageHandle)
     } finally {
-      monitor.traceMonitorActor ! AsyncMessageEvent(new RealMessageInvocation(messageHandle.receiver, messageHandle.message, messageHandle.channel), MessageEventEnum.Processed)
+      traceMonitorActor ! AsyncMessageEvent(new RealMessageInvocation(messageHandle.receiver, messageHandle.message, messageHandle.channel), MessageEventEnum.Processed)
       log("sent processing" + messageHandle.message)
 
     }
@@ -51,7 +52,7 @@ class TestActorRef(props: Props, address: String, monitor: akka.setack.core.moni
    */
   override def reply(message: Any) = {
     if (channel.isInstanceOf[ActorPromise]) {
-      monitor.traceMonitorActor ! ReplyMessageEvent(new RealMessageInvocation(channel, message, this))
+      traceMonitorActor ! ReplyMessageEvent(new RealMessageInvocation(channel, message, this))
     }
     super.reply(message)
   }
@@ -62,7 +63,7 @@ class TestActorRef(props: Props, address: String, monitor: akka.setack.core.moni
    */
   override def tryReply(message: Any): Boolean = {
     if (channel.isInstanceOf[ActorPromise]) {
-      monitor.traceMonitorActor ! ReplyMessageEvent(new RealMessageInvocation(channel, message, this))
+      traceMonitorActor ! ReplyMessageEvent(new RealMessageInvocation(channel, message, this))
     }
     super.tryTell(message)
   }
@@ -77,7 +78,7 @@ class TestActorRef(props: Props, address: String, monitor: akka.setack.core.moni
    * Overrides the postMessageToMailbox to apply the constraints in the schedule if there is any
    */
   override protected[akka] def postMessageToMailbox(message: Any, channel: UntypedChannel): Unit = {
-    if (_currentSchedule == null || _currentSchedule.isEmpty) postMessageToMailboxWithoutCheck(message, channel)
+    if (_currentSchedule == null) postMessageToMailboxWithoutCheck(message, channel)
     else {
       postMessageBySchedule(message, channel)
     }
@@ -89,7 +90,7 @@ class TestActorRef(props: Props, address: String, monitor: akka.setack.core.moni
    */
   private def postMessageToMailboxWithoutCheck(message: Any, channel: UntypedChannel): Unit = {
     super.postMessageToMailbox(message, channel)
-    monitor.traceMonitorActor ! AsyncMessageEvent(new RealMessageInvocation(this, message, channel), Delivered)
+    traceMonitorActor ! AsyncMessageEvent(new RealMessageInvocation(this, message, channel), Delivered)
   }
 
   /**
@@ -99,14 +100,14 @@ class TestActorRef(props: Props, address: String, monitor: akka.setack.core.moni
    * removes the message from the head of the schedule
    * 3) if the message is somewhere in the schedule other than the head, it keeps the message in the cloud
    */
-  private def postMessageBySchedule(message: Any, channel: UntypedChannel) {
+  private def postMessageBySchedule(message: Any, channel: UntypedChannel) = synchronized {
     val invocation = new RealMessageInvocation(this, message, channel)
     log("message index:" + message + " " + _currentSchedule.leastIndexOf(invocation))
     _currentSchedule.leastIndexOf(invocation) match {
       case -1 ⇒ postMessageToMailboxWithoutCheck(message, channel)
       case 0 ⇒ {
         postMessageToMailboxWithoutCheck(message, channel)
-        removeFromSchedule(invocation)
+        removeFromScheduleAndCheckForDeliveryFromCloud(invocation)
       }
       case _ ⇒ _cloudMessages.add(invocation) //; println("added to cloud" + invocation)
     }
@@ -121,7 +122,7 @@ class TestActorRef(props: Props, address: String, monitor: akka.setack.core.moni
     message: Any,
     timeout: Timeout,
     channel: UntypedChannel): Future[Any] = {
-    if (_currentSchedule == null || _currentSchedule.isEmpty) postMessageToMailboxAndCreateFutureResultWithTimeoutWithoutCheck(message, timeout, channel)
+    if (_currentSchedule == null) postMessageToMailboxAndCreateFutureResultWithTimeoutWithoutCheck(message, timeout, channel)
     else {
       postMessageAndCreateFutureBySchedule(message, timeout, channel)
 
@@ -137,7 +138,7 @@ class TestActorRef(props: Props, address: String, monitor: akka.setack.core.moni
     timeout: Timeout,
     channel: UntypedChannel): Future[Any] = {
     val future = super.postMessageToMailboxAndCreateFutureResultWithTimeout(message, timeout, channel)
-    monitor.traceMonitorActor ! AsyncMessageEvent(new RealMessageInvocation(this, message, future.asInstanceOf[ActorPromise]), Delivered)
+    traceMonitorActor ! AsyncMessageEvent(new RealMessageInvocation(this, message, future.asInstanceOf[ActorPromise]), Delivered)
     future
   }
 
@@ -162,7 +163,7 @@ class TestActorRef(props: Props, address: String, monitor: akka.setack.core.moni
    * 3) if the message is somewhere in the schedule other than the head, it creates the future, keeps the message in the cloud and
    * returns the future
    */
-  private def postMessageAndCreateFutureBySchedule(message: Any, timeout: Timeout, channel: UntypedChannel): Future[Any] = {
+  private def postMessageAndCreateFutureBySchedule(message: Any, timeout: Timeout, channel: UntypedChannel): Future[Any] = synchronized {
 
     var invocation = new RealMessageInvocation(this, message, channel)
     log("message index:" + message + " " + _currentSchedule.leastIndexOf(invocation))
@@ -170,7 +171,7 @@ class TestActorRef(props: Props, address: String, monitor: akka.setack.core.moni
       case -1 ⇒ postMessageToMailboxAndCreateFutureResultWithTimeoutWithoutCheck(message, timeout, channel)
       case 0 ⇒ {
         val future = postMessageToMailboxAndCreateFutureResultWithTimeoutWithoutCheck(message, timeout, channel)
-        removeFromSchedule(invocation)
+        removeFromScheduleAndCheckForDeliveryFromCloud(invocation)
         future
       }
       case _ ⇒ {
@@ -186,40 +187,39 @@ class TestActorRef(props: Props, address: String, monitor: akka.setack.core.moni
 
   /**
    * Removes the delivered message from the head of schedule and checks for the further
-   * delivery from the messages in the cloud
+   * delivery from the messages in the cloud. This method is synchronized by caller.
    */
-  private def removeFromSchedule(invocation: RealMessageInvocation) {
-    assert(_currentSchedule.removeFromHead(invocation))
+  private def removeFromScheduleAndCheckForDeliveryFromCloud(invocation: RealMessageInvocation) {
+    var scheduleUpdated = _currentSchedule.removeFromHead(invocation)
     log("removeFromSchedule: " + invocation.message)
-    checkForDeliveryFromCloud()
+    while (scheduleUpdated) {
+      scheduleUpdated = checkForDeliveryFromCloud()
+    }
   }
 
   /**
    * Checks if there is any message in the cloud that can be delivered.
-   * It is called after the current schedule is updated.
+   * In the case that there is a message in cloud which is in the head of any partial orders in the
+   * schedule, it posts the message into the mailbox,
+   * removes the message from the cloud, and updates the schedule (which returns true).
+   * In the case that nothing from the cloud can be delivered, it returns false.
    */
-  private def checkForDeliveryFromCloud() {
-    var deliveredInvocations = new HashSet[RealMessageInvocation]
+  private def checkForDeliveryFromCloud(): Boolean = {
     for (invocation ← _cloudMessages) {
       if (_currentSchedule.leastIndexOf(invocation) == 0) {
         postMessageToMailboxWithoutCheck(invocation.message, invocation.sender)
-        removeFromSchedule(invocation)
-        deliveredInvocations.add(invocation)
+        _cloudMessages.-=(invocation)
+        _currentSchedule.removeFromHead(invocation)
       }
     }
-
-    for (invocation ← deliveredInvocations) {
-
-      _cloudMessages.-=(invocation)
-      log("cloud= " + _cloudMessages.size)
-    }
+    false
 
   }
 
   /**
    * Adds a partial order between the message to the schedule
    */
-  def addPartialOrderToSchedule(po: TestMessageInvocationSequence) {
+  def addPartialOrderToSchedule(po: TestMessageInvocationSequence) = synchronized {
     if (_currentSchedule == null) _currentSchedule = new TestSchedule(Set(po))
     else _currentSchedule.addPartialOrder(po)
     log("current schedule= " + _currentSchedule.toString())
@@ -228,7 +228,9 @@ class TestActorRef(props: Props, address: String, monitor: akka.setack.core.moni
   /**
    * It is called by the end of the test to make sure that the specified schedule happened
    */
-  def scheduleHappened = _cloudMessages.isEmpty && _currentSchedule.isEmpty
+  def scheduleHappened = synchronized {
+    _cloudMessages.isEmpty && _currentSchedule.isEmpty
+  }
 
   private var debug = false
   private def log(s: String) = if (debug) println(s)
