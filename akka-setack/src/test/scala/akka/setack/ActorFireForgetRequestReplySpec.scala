@@ -11,6 +11,7 @@ import org.scalatest.BeforeAndAfterEach
 //import akka.testkit._
 //import akka.testkit.Testing.sleepFor
 //import akka.util.duration._
+import akka.setack._
 
 //import Actor._
 import akka.actor.Actor
@@ -107,22 +108,22 @@ class ActorFireForgetRequestReplySpec extends SetackWordSpec with MustMatchers {
     }
 
     "should shutdown crashed temporary actor" in {
-      //filterEvents(EventFilter[Exception]("Expected")) {
-      val actor = actorOf(Props[CrashingActor].withLifeCycle(Temporary))
-      actor.isRunning must be(true)
-      try {
-        actor ! "Die"
-      } catch {
-        case ex ⇒
-      }
+      filterEvents(EventFilter[Exception]("Expected")) {
+        val actor = actorOf(Props[CrashingActor].withLifeCycle(Temporary))
+        actor.isRunning must be(true)
+        try {
+          actor ! "Die"
+        } catch {
+          case ex ⇒
+        }
 
-      //state.finished.await
-      //sleepFor(1 second)
+        //state.finished.await
+        //sleepFor(1 second)
 
-      after(1000) {
-        actor.isShutdown must be(true)
+        after(1000) {
+          actor.isShutdown must be(true)
+        }
       }
-      //}
     }
   }
 }

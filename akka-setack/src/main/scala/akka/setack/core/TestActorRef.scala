@@ -106,8 +106,10 @@ class TestActorRef(props: Props, address: String, traceMonitorActor: ActorRef) e
     _currentSchedule.leastIndexOf(invocation) match {
       case -1 ⇒ postMessageToMailboxWithoutCheck(message, channel)
       case 0 ⇒ {
+        val result = _currentSchedule.removeFromHead(invocation)
+        log("removeFromSchedule: " + invocation.message)
         postMessageToMailboxWithoutCheck(message, channel)
-        removeFromScheduleAndCheckForDeliveryFromCloud(invocation)
+        checkForDeliveryFromCloud()
       }
       case _ ⇒ _cloudMessages.add(invocation) //; println("added to cloud" + invocation)
     }
@@ -170,12 +172,17 @@ class TestActorRef(props: Props, address: String, traceMonitorActor: ActorRef) e
     _currentSchedule.leastIndexOf(invocation) match {
       case -1 ⇒ postMessageToMailboxAndCreateFutureResultWithTimeoutWithoutCheck(message, timeout, channel)
       case 0 ⇒ {
+
+        val result = _currentSchedule.removeFromHead(invocation)
+        log("removeFromSchedule: " + invocation.message)
         val future = postMessageToMailboxAndCreateFutureResultWithTimeoutWithoutCheck(message, timeout, channel)
-        removeFromScheduleAndCheckForDeliveryFromCloud(invocation)
+        checkForDeliveryFromCloud()
         future
       }
       case _ ⇒ {
-        val future = createFuture(timeout, channel)
+        val newTimeout = Timeout(timeout.duration.toMillis +
+          (akka.setack.TestConfig.sleepInterval * (akka.setack.TestConfig.maxTryForStability * akka.setack.TestConfig.maxTryForStability)))
+        val future = createFuture(newTimeout, channel)
         invocation = new RealMessageInvocation(this, message, future.asInstanceOf[ActorPromise])
         _cloudMessages.add(invocation)
         log("added to cloud" + invocation)
@@ -186,30 +193,34 @@ class TestActorRef(props: Props, address: String, traceMonitorActor: ActorRef) e
   }
 
   /**
-   * Removes the delivered message from the head of schedule and checks for the further
+   * Checks for the further
    * delivery from the messages in the cloud. This method is synchronized by caller.
    */
-  private def removeFromScheduleAndCheckForDeliveryFromCloud(invocation: RealMessageInvocation) {
-    var scheduleUpdated = _currentSchedule.removeFromHead(invocation)
-    log("removeFromSchedule: " + invocation.message)
+  private def checkForDeliveryFromCloud() {
+    var scheduleUpdated = deliverFromCloud()
     while (scheduleUpdated) {
-      scheduleUpdated = checkForDeliveryFromCloud()
+      scheduleUpdated = deliverFromCloud()
     }
   }
 
   /**
    * Checks if there is any message in the cloud that can be delivered.
    * In the case that there is a message in cloud which is in the head of any partial orders in the
-   * schedule, it posts the message into the mailbox,
+   * schedule, or the schedule is empty it posts the message into the mailbox,
    * removes the message from the cloud, and updates the schedule (which returns true).
    * In the case that nothing from the cloud can be delivered, it returns false.
    */
-  private def checkForDeliveryFromCloud(): Boolean = {
+  private def deliverFromCloud(): Boolean = {
     for (invocation ← _cloudMessages) {
-      if (_currentSchedule.leastIndexOf(invocation) == 0) {
-        postMessageToMailboxWithoutCheck(invocation.message, invocation.sender)
+      if (_currentSchedule.isEmpty) {
         _cloudMessages.-=(invocation)
-        _currentSchedule.removeFromHead(invocation)
+        postMessageToMailboxWithoutCheck(invocation.message, invocation.sender)
+        return true
+      } else if (_currentSchedule.leastIndexOf(invocation) == 0) {
+        _cloudMessages.-=(invocation)
+        val result = _currentSchedule.removeFromHead(invocation)
+        postMessageToMailboxWithoutCheck(invocation.message, invocation.sender)
+        return true
       }
     }
     false
@@ -226,12 +237,18 @@ class TestActorRef(props: Props, address: String, traceMonitorActor: ActorRef) e
   }
 
   /**
-   * It is called by the end of the test to make sure that the specified schedule happened
+   * It is called to make sure that the specified schedule happened
    */
   def scheduleHappened = synchronized {
-    _cloudMessages.isEmpty && _currentSchedule.isEmpty
+    _currentSchedule == null || _currentSchedule.isEmpty
   }
 
+  /**
+   * It is called when checking for stable state to make sure that all the messages in the cloud are finally delivered.
+   */
+  def cloudIsEmpty = synchronized {
+    _cloudMessages.isEmpty
+  }
   private var debug = false
   private def log(s: String) = if (debug) println(s)
 

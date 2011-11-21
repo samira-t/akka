@@ -23,6 +23,7 @@ class TestExecutionManager(traceMonitorActor: ActorRef) {
    * Starts the monitor actor
    */
   def startTest {
+    (traceMonitorActor ? ClearState).get
   }
 
   /**
@@ -45,22 +46,34 @@ class TestExecutionManager(traceMonitorActor: ActorRef) {
       var triedCheck = 0
       var isStable = false
       var notProcessedMessages = new ArrayBuffer[RealMessageInvocation]()
+      var monitor = false
 
       while (triedCheck < maxTry && !isStable) {
         triedCheck += 1
         Thread.sleep(TestConfig.sleepInterval * triedCheck)
 
         isStable = true
+        monitor = false
         actorsWithMessages.clear()
         notProcessedMessages.clear()
 
         for (a ← Actor.registry.local) {
-
-          if (a.isRunning && !a.asInstanceOf[LocalActorRef].dispatcher.mailboxIsEmpty(a.asInstanceOf[LocalActorRef])) {
-            log(a + " has message")
-            if (triedCheck == maxTry)
-              actorsWithMessages.add(a)
-            isStable = false
+          if (a.isRunning) {
+            if (a == traceMonitorActor && !a.asInstanceOf[LocalActorRef].dispatcher.mailboxIsEmpty(a.asInstanceOf[LocalActorRef])) {
+              isStable = false
+              if (triedCheck == maxTry) monitor = true
+            } //          if (a.isRunning && !a.asInstanceOf[LocalActorRef].dispatcher.mailboxIsEmpty(a.asInstanceOf[LocalActorRef])) {
+            //            log(a + " has message")
+            //            if (triedCheck == maxTry)
+            //              actorsWithMessages.add(a)
+            //            isStable = false
+            //          }
+            else if (a.isInstanceOf[TestActorRef]) {
+              if (!a.asInstanceOf[TestActorRef].cloudIsEmpty ||
+                !a.asInstanceOf[TestActorRef].scheduleHappened ||
+                !a.asInstanceOf[LocalActorRef].dispatcher.mailboxIsEmpty(a.asInstanceOf[LocalActorRef]))
+                isStable = false
+            }
           }
         }
 
@@ -81,7 +94,7 @@ class TestExecutionManager(traceMonitorActor: ActorRef) {
           }
         }
       }
-      if (!isStable) println("no stable" + notProcessedMessages.size)
+      if (!isStable) println("no stable" + notProcessedMessages.size + monitor)
       isStable
 
     }
@@ -94,22 +107,9 @@ class TestExecutionManager(traceMonitorActor: ActorRef) {
     // with a timeout, waits for the system to get stable 
     val stable = checkForStability()
 
-    //Reset the current state of the traceMonitorActor to prepare it for the next test in the test case.
-    (traceMonitorActor ? ClearState).get
-
     //Stop other actors
     for (actor ← Actor.registry.local) {
-
-      /*
-     *  removes the actors that has not finished processing their messages
-     *  from registry to prepare the registry for the next test. 
-     *  These actors might be in an infinite loop and cannot be stopped 
-     */
-      if (actorsWithMessages.contains(actor)) {
-        log("unregister" + actor)
-        Actor.registry.unregister(actor)
-        log(actor + " has not finished processing its messages")
-      } else if (actor != traceMonitorActor) // stop other actors except the traceMonitorActor
+      if (actor != traceMonitorActor) // stop other actors except the traceMonitorActor
         actor.stop
     }
 

@@ -10,6 +10,7 @@ import org.junit.Test
 import org.junit.Before
 import org.junit.After
 import akka.setack.core.TestMessageInvocation
+import akka.setack.core.TestMessageInvocationSequence._
 import akka.setack.core.TestActorRef
 import akka.setack.SetackJUnit
 import akka.setack.Commons._

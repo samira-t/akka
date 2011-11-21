@@ -88,14 +88,6 @@ class TestMessageInvocation {
     (ch1 == anyActorRef) || (ch2 == anyActorRef) || (ch1 == ch2)
   }
 
-  /**
-   * This operator can be applied to test messages to create a sequence(order) of the test messages which can be used for
-   * deterministic execution via "setScheudle" API.
-   */
-  def ->(testMessage: TestMessageInvocation): TestMessageInvocationSequence = {
-    return (new TestMessageInvocationSequence(this) -> testMessage)
-  }
-
   override def toString(): String = "(" + sender + "," + receiver + "," + (if (message != null) message else messagePattern) + ")"
 
   //only for debugging
@@ -147,4 +139,8 @@ class TestMessageInvocationSequence(testMessage: TestMessageInvocation) {
     return true
   }
 
+}
+
+object TestMessageInvocationSequence {
+  implicit def toSequence(testMessage: TestMessageInvocation): TestMessageInvocationSequence = new TestMessageInvocationSequence(testMessage)
 }
